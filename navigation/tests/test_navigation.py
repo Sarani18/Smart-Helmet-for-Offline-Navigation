@@ -600,6 +600,12 @@ class TestRouteProgressEngine(unittest.TestCase):
         self.assertFalse(result.advanced)
         self.assertEqual(result.reason, "route_not_loaded")
 
+    def test_expected_next_turn_and_distance_helpers(self):
+        expected_turn = self.engine.get_expected_next_turn()
+        expected_distance = self.engine.get_distance_to_next_turn_m()
+        self.assertEqual(expected_turn, TurnClass.RIGHT)
+        self.assertEqual(expected_distance, 300.0)
+
 
 class TestNavigationAPIService(unittest.TestCase):
 
@@ -641,6 +647,8 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(result["reason"], "route_loaded")
         self.assertEqual(result["nav_mode"], "ONLINE")
         self.assertFalse(result["degraded"])
+        self.assertIsNotNone(result["nav_hint"])
+        self.assertEqual(result["nav_hint"]["expected_next_turn"], "RIGHT")
 
     def test_async_visual_event_ingestion(self):
         start_payload = {
@@ -666,6 +674,39 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertGreaterEqual(result["confidence_score"], 0.0)
         self.assertLessEqual(result["confidence_score"], 1.0)
         self.assertIn(result["nav_mode"], {"ONLINE", "OFFLINE", "DEGRADED"})
+        # Route has only one step in this test setup; after match, no next hint.
+        self.assertIsNone(result["nav_hint"])
+
+    def test_nav_hint_not_repeated_without_change(self):
+        route_data = {
+            "origin": {"lat": 19.076, "lon": 72.877, "label": "Home"},
+            "destination": {"lat": 19.100, "lon": 72.900, "label": "Airport"},
+            "steps": [
+                {"lat": 19.078, "lon": 72.879, "instruction": "Turn right", "distance": 300},
+                {"lat": 19.085, "lon": 72.885, "instruction": "Turn left", "distance": 700},
+            ],
+        }
+
+        start_payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1001,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        start_result = asyncio.run(self.service.ingest_ui_action(start_payload, route_data))
+        self.assertIsNotNone(start_result["nav_hint"])
+
+        # Mismatch event does not advance step; hint signature remains same.
+        event_payload = {
+            "session_id": "ride_1",
+            "event_id": "evt_mismatch",
+            "ts_ms": 1200,
+            "event_type": "TURN",
+            "confidence": 0.8,
+            "payload": {"turn_class": "LEFT"},
+        }
+        result = asyncio.run(self.service.ingest_visual_event(event_payload, now_ts_ms=1500))
+        self.assertIsNone(result["nav_hint"])
 
     def test_dead_reckoning_endpoint_is_placeholder(self):
         result = asyncio.run(self.service.ingest_dead_reckoning_event({"dummy": 1}))

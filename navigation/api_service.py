@@ -18,6 +18,7 @@ from .contracts import (
     LocalizationControlAction,
     LocalizationControlMessage,
     LocalizationModuleType,
+    NavHintMessage,
     NavMode,
     NetworkStatus,
     UIActionType,
@@ -60,6 +61,7 @@ class NavigationAPIService:
 
         self._route_loaded_ts_ms: Optional[int] = None
         self._last_accepted_event_ts_ms: Optional[int] = None
+        self._last_nav_hint_signature: Optional[tuple] = None
 
     async def ingest_visual_event(
         self,
@@ -88,6 +90,7 @@ class NavigationAPIService:
 
         degraded_reason = self._get_degraded_reason(now_ts_ms)
         nav_mode = self._resolve_nav_mode(degraded_reason)
+        nav_hint = self._build_nav_hint(event.session_id, now_ts_ms)
 
         return {
             "accepted": ingest.accepted,
@@ -100,6 +103,7 @@ class NavigationAPIService:
             "nav_mode": nav_mode.value,
             "degraded": degraded_reason is not None,
             "degraded_reason": degraded_reason,
+            "nav_hint": nav_hint,
         }
 
     async def ingest_dead_reckoning_event(
@@ -133,6 +137,7 @@ class NavigationAPIService:
             self._confidence = NavigationConfidenceTracker()
             self._route_loaded_ts_ms = None
             self._last_accepted_event_ts_ms = None
+            self._last_nav_hint_signature = None
             return {
                 "accepted": True,
                 "action_type": action.action_type.value,
@@ -141,6 +146,7 @@ class NavigationAPIService:
                 "nav_mode": self._resolve_nav_mode(None).value,
                 "degraded": False,
                 "degraded_reason": None,
+                "nav_hint": None,
             }
 
         if action.action_type in (UIActionType.START_NAVIGATION, UIActionType.REROUTE_REQUEST):
@@ -161,9 +167,11 @@ class NavigationAPIService:
             self._progress.load_route(route)
             self._route_loaded_ts_ms = action.ts_ms
             self._last_accepted_event_ts_ms = None
+            self._last_nav_hint_signature = None
 
             degraded_reason = self._get_degraded_reason(action.ts_ms)
             nav_mode = self._resolve_nav_mode(degraded_reason)
+            nav_hint = self._build_nav_hint(action.session_id, action.ts_ms)
 
             return {
                 "accepted": True,
@@ -175,6 +183,7 @@ class NavigationAPIService:
                 "nav_mode": nav_mode.value,
                 "degraded": degraded_reason is not None,
                 "degraded_reason": degraded_reason,
+                "nav_hint": nav_hint,
             }
 
         degraded_reason = self._get_degraded_reason(action.ts_ms)
@@ -187,6 +196,7 @@ class NavigationAPIService:
             "nav_mode": nav_mode.value,
             "degraded": degraded_reason is not None,
             "degraded_reason": degraded_reason,
+            "nav_hint": None,
         }
 
     async def update_connectivity_status(
@@ -305,6 +315,37 @@ class NavigationAPIService:
             return "no_recent_localization_events"
 
         return None
+
+    def _build_nav_hint(self, session_id: str, ts_ms: int) -> Optional[Dict[str, Any]]:
+        expected_turn = self._progress.get_expected_next_turn()
+        distance_to_next = self._progress.get_distance_to_next_turn_m()
+
+        if expected_turn is None or distance_to_next is None:
+            self._last_nav_hint_signature = None
+            return None
+
+        # Send hint only when maneuver or distance bucket (50m) changes.
+        signature = (
+            self._progress.get_active_step_index(),
+            expected_turn.value,
+            int(distance_to_next // 50),
+        )
+        if signature == self._last_nav_hint_signature:
+            return None
+
+        self._last_nav_hint_signature = signature
+        hint = NavHintMessage(
+            session_id=session_id,
+            ts_ms=ts_ms,
+            expected_next_turn=expected_turn,
+            distance_to_next_turn_m=distance_to_next,
+        )
+        return {
+            "session_id": hint.session_id,
+            "ts_ms": hint.ts_ms,
+            "expected_next_turn": hint.expected_next_turn.value,
+            "distance_to_next_turn_m": hint.distance_to_next_turn_m,
+        }
 
     @staticmethod
     def _build_localization_commands(

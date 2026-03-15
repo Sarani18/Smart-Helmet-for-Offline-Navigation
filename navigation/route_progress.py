@@ -40,6 +40,18 @@ class RouteProgressEngine:
     def has_route(self) -> bool:
         return self._route is not None
 
+    def get_expected_next_turn(self) -> Optional[TurnClass]:
+        if self._route is None or self.is_destination_reached():
+            return None
+        step = self._route.steps[self._active_step_index]
+        return self.infer_expected_turn_from_instruction(step.instruction)
+
+    def get_distance_to_next_turn_m(self) -> Optional[float]:
+        if self._route is None or self.is_destination_reached():
+            return None
+        step = self._route.steps[self._active_step_index]
+        return float(step.distance_meters)
+
     def get_active_step_index(self) -> int:
         return self._active_step_index
 
@@ -82,12 +94,12 @@ class RouteProgressEngine:
 
     def _event_matches_step(self, event: EventMessage, step_text: str) -> bool:
         if event.event_type == LocalizationEventType.TURN:
-            expected_turn = self._infer_expected_turn(step_text)
+            expected_turn = self.infer_expected_turn_from_instruction(step_text)
             return event.payload.turn_class == expected_turn
 
         if event.event_type == LocalizationEventType.SIGNBOARD:
             sign_text = event.payload.text.lower()
-            expected_turn = self._infer_expected_turn(step_text)
+            expected_turn = self.infer_expected_turn_from_instruction(step_text)
 
             if expected_turn == TurnClass.LEFT and "left" in sign_text:
                 return True
@@ -106,7 +118,7 @@ class RouteProgressEngine:
         return False
 
     @staticmethod
-    def _infer_expected_turn(step_text: str) -> TurnClass:
+    def infer_expected_turn_from_instruction(step_text: str) -> TurnClass:
         text = step_text.lower()
         if "u-turn" in text:
             return TurnClass.U_TURN
