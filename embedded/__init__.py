@@ -12,7 +12,7 @@ from .led_controller import LEDController
 from .instruction_parser import InstructionParser
 from .app_interface.ui_manager import UIManager
 from .app_interface.device_manager import DeviceManager
-
+from .position_bridge import PositionBridge, LocationUpdate, NavUpdate
 __all__ = [
     "BluetoothComm",
     "LEDController",
