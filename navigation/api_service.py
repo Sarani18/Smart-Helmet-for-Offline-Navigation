@@ -21,6 +21,8 @@ from .contracts import (
     NavHintMessage,
     NavMode,
     NetworkStatus,
+    PositionMode,
+    UIStateMessage,
     UIActionType,
 )
 from .confidence_tracker import NavigationConfidenceTracker
@@ -62,6 +64,8 @@ class NavigationAPIService:
         self._route_loaded_ts_ms: Optional[int] = None
         self._last_accepted_event_ts_ms: Optional[int] = None
         self._last_nav_hint_signature: Optional[tuple] = None
+        self._active_session_id: Optional[str] = None
+        self._route_polyline: List[tuple] = []
 
     async def ingest_visual_event(
         self,
@@ -91,6 +95,7 @@ class NavigationAPIService:
         degraded_reason = self._get_degraded_reason(now_ts_ms)
         nav_mode = self._resolve_nav_mode(degraded_reason)
         nav_hint = self._build_nav_hint(event.session_id, now_ts_ms)
+        ui_state = self._build_ui_state(event.session_id, now_ts_ms)
 
         return {
             "accepted": ingest.accepted,
@@ -104,6 +109,7 @@ class NavigationAPIService:
             "degraded": degraded_reason is not None,
             "degraded_reason": degraded_reason,
             "nav_hint": nav_hint,
+            "ui_state": ui_state,
         }
 
     async def ingest_dead_reckoning_event(
@@ -138,6 +144,9 @@ class NavigationAPIService:
             self._route_loaded_ts_ms = None
             self._last_accepted_event_ts_ms = None
             self._last_nav_hint_signature = None
+            self._route_polyline = []
+            self._active_session_id = action.session_id
+            ui_state = self._build_ui_state(action.session_id, action.ts_ms)
             return {
                 "accepted": True,
                 "action_type": action.action_type.value,
@@ -147,6 +156,7 @@ class NavigationAPIService:
                 "degraded": False,
                 "degraded_reason": None,
                 "nav_hint": None,
+                "ui_state": ui_state,
             }
 
         if action.action_type in (UIActionType.START_NAVIGATION, UIActionType.REROUTE_REQUEST):
@@ -168,10 +178,13 @@ class NavigationAPIService:
             self._route_loaded_ts_ms = action.ts_ms
             self._last_accepted_event_ts_ms = None
             self._last_nav_hint_signature = None
+            self._active_session_id = action.session_id
+            self._route_polyline = self._extract_route_polyline(route_data)
 
             degraded_reason = self._get_degraded_reason(action.ts_ms)
             nav_mode = self._resolve_nav_mode(degraded_reason)
             nav_hint = self._build_nav_hint(action.session_id, action.ts_ms)
+            ui_state = self._build_ui_state(action.session_id, action.ts_ms)
 
             return {
                 "accepted": True,
@@ -184,10 +197,12 @@ class NavigationAPIService:
                 "degraded": degraded_reason is not None,
                 "degraded_reason": degraded_reason,
                 "nav_hint": nav_hint,
+                "ui_state": ui_state,
             }
 
         degraded_reason = self._get_degraded_reason(action.ts_ms)
         nav_mode = self._resolve_nav_mode(degraded_reason)
+        ui_state = self._build_ui_state(action.session_id, action.ts_ms)
         return {
             "accepted": False,
             "action_type": action.action_type.value,
@@ -197,6 +212,7 @@ class NavigationAPIService:
             "degraded": degraded_reason is not None,
             "degraded_reason": degraded_reason,
             "nav_hint": None,
+            "ui_state": ui_state,
         }
 
     async def update_connectivity_status(
@@ -256,6 +272,8 @@ class NavigationAPIService:
 
         degraded_reason = self._get_degraded_reason(status.ts_ms)
         nav_mode = self._resolve_nav_mode(degraded_reason)
+        session_id = self._active_session_id or status.session_id
+        ui_state = self._build_ui_state(session_id, status.ts_ms)
 
         return {
             "accepted": True,
@@ -281,6 +299,30 @@ class NavigationAPIService:
             "nav_mode": nav_mode.value,
             "degraded": degraded_reason is not None,
             "degraded_reason": degraded_reason,
+            "ui_state": ui_state,
+        }
+
+    async def get_ui_state(
+        self,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Return UI-ready navigation state snapshot."""
+        required = ["session_id", "ts_ms"]
+        missing = [field for field in required if field not in payload]
+        if missing:
+            joined = ", ".join(missing)
+            raise ValueError(f"Missing ui state request fields: {joined}")
+
+        session_id = payload["session_id"]
+        ts_ms = payload["ts_ms"]
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        if not isinstance(ts_ms, int) or ts_ms < 0:
+            raise ValueError("ts_ms must be a non-negative integer")
+
+        return {
+            "accepted": True,
+            "ui_state": self._build_ui_state(session_id.strip(), ts_ms),
         }
 
     @property
@@ -315,6 +357,72 @@ class NavigationAPIService:
             return "no_recent_localization_events"
 
         return None
+
+    def _resolve_position_mode(self) -> PositionMode:
+        if not self._progress.has_route():
+            return PositionMode.UNKNOWN
+        if self._network_status == NetworkStatus.OFFLINE:
+            return PositionMode.VISUAL
+        return PositionMode.GPS
+
+    def _build_ui_state(self, session_id: str, ts_ms: int) -> Dict[str, Any]:
+        degraded_reason = self._get_degraded_reason(ts_ms)
+        nav_mode = self._resolve_nav_mode(degraded_reason)
+        position_mode = self._resolve_position_mode()
+
+        next_instruction = self._progress.get_next_instruction_text() or ""
+        distance_to_next = self._progress.get_distance_to_next_turn_m()
+        if distance_to_next is None:
+            distance_to_next = 0.0
+
+        state = UIStateMessage(
+            session_id=session_id,
+            ts_ms=ts_ms,
+            nav_mode=nav_mode,
+            position_mode=position_mode,
+            next_instruction_text=next_instruction,
+            distance_to_next_m=float(distance_to_next),
+            confidence=float(self._confidence.get_score()),
+            off_route_flag=False,
+            destination_reached_flag=self._progress.is_destination_reached(),
+            active_step_index=self._progress.get_active_step_index(),
+            route_polyline=list(self._route_polyline),
+        )
+        return {
+            "session_id": state.session_id,
+            "ts_ms": state.ts_ms,
+            "nav_mode": state.nav_mode.value,
+            "position_mode": state.position_mode.value,
+            "next_instruction_text": state.next_instruction_text,
+            "distance_to_next_m": state.distance_to_next_m,
+            "confidence": state.confidence,
+            "off_route_flag": state.off_route_flag,
+            "destination_reached_flag": state.destination_reached_flag,
+            "active_step_index": state.active_step_index,
+            "route_polyline": [list(item) for item in state.route_polyline],
+            "degraded": degraded_reason is not None,
+            "degraded_reason": degraded_reason,
+        }
+
+    @staticmethod
+    def _extract_route_polyline(route_data: Dict[str, Any]) -> List[tuple]:
+        polyline: List[tuple] = []
+
+        origin = route_data.get("origin") or {}
+        if "lat" in origin and "lon" in origin:
+            polyline.append((float(origin["lat"]), float(origin["lon"])))
+
+        for step in route_data.get("steps", []):
+            if "lat" in step and "lon" in step:
+                polyline.append((float(step["lat"]), float(step["lon"])))
+
+        destination = route_data.get("destination") or {}
+        if "lat" in destination and "lon" in destination:
+            destination_pt = (float(destination["lat"]), float(destination["lon"]))
+            if not polyline or polyline[-1] != destination_pt:
+                polyline.append(destination_pt)
+
+        return polyline
 
     def _build_nav_hint(self, session_id: str, ts_ms: int) -> Optional[Dict[str, Any]]:
         expected_turn = self._progress.get_expected_next_turn()

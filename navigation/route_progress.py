@@ -52,6 +52,12 @@ class RouteProgressEngine:
         step = self._route.steps[self._active_step_index]
         return float(step.distance_meters)
 
+    def get_next_instruction_text(self) -> Optional[str]:
+        if self._route is None or self.is_destination_reached():
+            return None
+        step = self._route.steps[self._active_step_index]
+        return step.instruction
+
     def get_active_step_index(self) -> int:
         return self._active_step_index
 

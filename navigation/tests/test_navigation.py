@@ -649,6 +649,8 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertFalse(result["degraded"])
         self.assertIsNotNone(result["nav_hint"])
         self.assertEqual(result["nav_hint"]["expected_next_turn"], "RIGHT")
+        self.assertIn("ui_state", result)
+        self.assertEqual(result["ui_state"]["position_mode"], "GPS")
 
     def test_async_visual_event_ingestion(self):
         start_payload = {
@@ -736,6 +738,7 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(len(second["commands"]), 2)
         self.assertEqual(second["commands"][0]["action"], "START")
         self.assertIn(second["nav_mode"], {"OFFLINE", "DEGRADED"})
+        self.assertIn(second["ui_state"]["position_mode"], {"VISUAL", "UNKNOWN"})
 
     def test_connectivity_online_transition_emits_stop_commands(self):
         # First move to OFFLINE.
@@ -792,6 +795,28 @@ class TestNavigationAPIService(unittest.TestCase):
     def test_connectivity_payload_validation(self):
         with self.assertRaises(ContractValidationError):
             asyncio.run(self.service.update_connectivity_status({"session_id": "ride_1"}))
+
+    def test_get_ui_state_endpoint(self):
+        start_payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1001,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        asyncio.run(self.service.ingest_ui_action(start_payload, self.route_data))
+
+        ui_result = asyncio.run(self.service.get_ui_state({"session_id": "ride_1", "ts_ms": 1500}))
+        self.assertTrue(ui_result["accepted"])
+        state = ui_result["ui_state"]
+        self.assertEqual(state["session_id"], "ride_1")
+        self.assertEqual(state["position_mode"], "GPS")
+        self.assertEqual(state["next_instruction_text"], "Turn right")
+        self.assertEqual(state["distance_to_next_m"], 300.0)
+        self.assertGreaterEqual(len(state["route_polyline"]), 2)
+
+    def test_get_ui_state_validation_error(self):
+        with self.assertRaises(ValueError):
+            asyncio.run(self.service.get_ui_state({"session_id": "ride_1"}))
 
     def test_degraded_mode_on_low_confidence(self):
         start_payload = {
