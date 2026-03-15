@@ -35,8 +35,9 @@ from navigation.contracts import (
 )
 from navigation.event_validator import NavigationContractValidator, ContractValidationError
 from navigation.event_pipeline import LocalizationEventPipeline
-from navigation.route_progress import RouteProgressEngine
+from navigation.route_progress import RouteProgressEngine, ProgressUpdate
 from navigation.api_service import NavigationAPIService
+from navigation.confidence_tracker import NavigationConfidenceTracker
 
 
 # ---------------------------------------------------------------------------
@@ -625,6 +626,8 @@ class TestNavigationAPIService(unittest.TestCase):
         result = asyncio.run(self.service.ingest_ui_action(payload))
         self.assertFalse(result["accepted"])
         self.assertEqual(result["reason"], "route_data_required")
+        self.assertIn("nav_mode", result)
+        self.assertIn("degraded", result)
 
     def test_ui_start_navigation_loads_route(self):
         payload = {
@@ -636,6 +639,8 @@ class TestNavigationAPIService(unittest.TestCase):
         result = asyncio.run(self.service.ingest_ui_action(payload, self.route_data))
         self.assertTrue(result["accepted"])
         self.assertEqual(result["reason"], "route_loaded")
+        self.assertEqual(result["nav_mode"], "ONLINE")
+        self.assertFalse(result["degraded"])
 
     def test_async_visual_event_ingestion(self):
         start_payload = {
@@ -658,6 +663,9 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertTrue(result["accepted"])
         self.assertEqual(result["active_step_index"], 1)
         self.assertTrue(result["destination_reached"])
+        self.assertGreaterEqual(result["confidence_score"], 0.0)
+        self.assertLessEqual(result["confidence_score"], 1.0)
+        self.assertIn(result["nav_mode"], {"ONLINE", "OFFLINE", "DEGRADED"})
 
     def test_dead_reckoning_endpoint_is_placeholder(self):
         result = asyncio.run(self.service.ingest_dead_reckoning_event({"dummy": 1}))
@@ -686,6 +694,7 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(second["network_status"], "OFFLINE")
         self.assertEqual(len(second["commands"]), 2)
         self.assertEqual(second["commands"][0]["action"], "START")
+        self.assertIn(second["nav_mode"], {"OFFLINE", "DEGRADED"})
 
     def test_connectivity_online_transition_emits_stop_commands(self):
         # First move to OFFLINE.
@@ -737,10 +746,149 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(second["network_status"], "ONLINE")
         self.assertEqual(len(second["commands"]), 2)
         self.assertEqual(second["commands"][0]["action"], "STOP")
+        self.assertIn(second["nav_mode"], {"ONLINE", "DEGRADED"})
 
     def test_connectivity_payload_validation(self):
         with self.assertRaises(ContractValidationError):
             asyncio.run(self.service.update_connectivity_status({"session_id": "ride_1"}))
+
+    def test_degraded_mode_on_low_confidence(self):
+        start_payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1000,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        asyncio.run(self.service.ingest_ui_action(start_payload, self.route_data))
+
+        # Send mismatching turn events to drive confidence below threshold.
+        event_1 = {
+            "session_id": "ride_1",
+            "event_id": "evt_m1",
+            "ts_ms": 2000,
+            "event_type": "TURN",
+            "confidence": 0.9,
+            "payload": {"turn_class": "LEFT"},
+        }
+        event_2 = {
+            "session_id": "ride_1",
+            "event_id": "evt_m2",
+            "ts_ms": 2300,
+            "event_type": "TURN",
+            "confidence": 0.9,
+            "payload": {"turn_class": "LEFT"},
+        }
+        asyncio.run(self.service.ingest_visual_event(event_1, now_ts_ms=2600))
+        result = asyncio.run(self.service.ingest_visual_event(event_2, now_ts_ms=3000))
+
+        self.assertEqual(result["nav_mode"], "DEGRADED")
+        self.assertTrue(result["degraded"])
+        self.assertEqual(result["degraded_reason"], "low_confidence")
+
+    def test_degraded_mode_on_no_recent_events_while_offline(self):
+        service = NavigationAPIService(
+            offline_after_failures=1,
+            online_after_successes=1,
+            degraded_no_event_ms=1000,
+        )
+        start_payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1000,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        asyncio.run(service.ingest_ui_action(start_payload, self.route_data))
+
+        # Move to offline immediately.
+        asyncio.run(
+            service.update_connectivity_status(
+                {
+                    "session_id": "ride_1",
+                    "ts_ms": 1200,
+                    "network_available": False,
+                    "internet_reachable": False,
+                }
+            )
+        )
+
+        # No localization event arrives for more than degraded_no_event_ms.
+        result = asyncio.run(
+            service.update_connectivity_status(
+                {
+                    "session_id": "ride_1",
+                    "ts_ms": 2601,
+                    "network_available": False,
+                    "internet_reachable": False,
+                }
+            )
+        )
+
+        self.assertEqual(result["nav_mode"], "DEGRADED")
+        self.assertTrue(result["degraded"])
+        self.assertEqual(result["degraded_reason"], "no_recent_localization_events")
+
+
+class TestNavigationConfidenceTracker(unittest.TestCase):
+
+    def setUp(self):
+        self.tracker = NavigationConfidenceTracker(initial_score=0.6)
+
+    @staticmethod
+    def _event(confidence: float, ts_ms: int, turn: TurnClass):
+        return EventMessage(
+            session_id="ride_1",
+            event_id=f"evt_{ts_ms}",
+            ts_ms=ts_ms,
+            event_type=LocalizationEventType.TURN,
+            confidence=confidence,
+            payload=TurnPayload(turn_class=turn),
+        )
+
+    def test_confidence_increases_on_match(self):
+        event = self._event(confidence=0.9, ts_ms=1000, turn=TurnClass.RIGHT)
+        before = self.tracker.get_score()
+        self.tracker.update_from_event(
+            event,
+            progress=ProgressUpdate(
+                advanced=True,
+                active_step_index=1,
+                destination_reached=False,
+                reason="step_advanced",
+            ),
+        )
+        after = self.tracker.get_score()
+        self.assertGreater(after, before)
+
+    def test_confidence_decreases_on_mismatch(self):
+        event = self._event(confidence=0.8, ts_ms=1000, turn=TurnClass.LEFT)
+        before = self.tracker.get_score()
+        self.tracker.update_from_event(
+            event,
+            progress=ProgressUpdate(
+                advanced=False,
+                active_step_index=0,
+                destination_reached=False,
+                reason="no_match",
+            ),
+        )
+        after = self.tracker.get_score()
+        self.assertLess(after, before)
+
+    def test_confidence_time_decay(self):
+        event = self._event(confidence=0.9, ts_ms=1000, turn=TurnClass.RIGHT)
+        self.tracker.update_from_event(
+            event,
+            progress=ProgressUpdate(
+                advanced=True,
+                active_step_index=1,
+                destination_reached=False,
+                reason="step_advanced",
+            ),
+        )
+        before_decay = self.tracker.get_score()
+        self.tracker.apply_time_decay(now_ts_ms=12_000)
+        after_decay = self.tracker.get_score()
+        self.assertLess(after_decay, before_decay)
 
 
 if __name__ == "__main__":
