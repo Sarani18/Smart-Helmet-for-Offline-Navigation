@@ -30,6 +30,7 @@ from .contracts import (
 	UIActionMessage,
 )
 from .event_validator import NavigationContractValidator, ContractValidationError
+from .event_pipeline import LocalizationEventPipeline, EventIngestResult
 
 __all__ = [
 	"RouteProcessor",
@@ -54,4 +55,6 @@ __all__ = [
 	"UIActionMessage",
 	"NavigationContractValidator",
 	"ContractValidationError",
+	"LocalizationEventPipeline",
+	"EventIngestResult",
 ]

@@ -33,6 +33,7 @@ from navigation.contracts import (
     UIActionMessage,
 )
 from navigation.event_validator import NavigationContractValidator, ContractValidationError
+from navigation.event_pipeline import LocalizationEventPipeline
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +416,70 @@ class TestNavigationContractValidator(unittest.TestCase):
         }
         with self.assertRaises(ContractValidationError):
             self.validator.parse_ui_action(payload)
+
+
+class TestLocalizationEventPipeline(unittest.TestCase):
+
+    def setUp(self):
+        self.pipeline = LocalizationEventPipeline(
+            max_staleness_ms=1500,
+            reorder_window_ms=300,
+            seen_cache_size=10,
+        )
+
+    @staticmethod
+    def _turn_event(event_id: str, ts_ms: int):
+        return EventMessage(
+            session_id="ride_1",
+            event_id=event_id,
+            ts_ms=ts_ms,
+            event_type=LocalizationEventType.TURN,
+            confidence=0.9,
+            payload=TurnPayload(turn_class=TurnClass.RIGHT),
+        )
+
+    def test_reject_duplicate_event_id(self):
+        now = 10_000
+        event = self._turn_event("evt_dup", 9_800)
+        first = self.pipeline.ingest(event, now)
+        second = self.pipeline.ingest(event, now)
+        self.assertTrue(first.accepted)
+        self.assertFalse(second.accepted)
+        self.assertEqual(second.reason, "duplicate_event_id")
+
+    def test_reject_stale_event(self):
+        now = 10_000
+        stale = self._turn_event("evt_old", 8_000)
+        result = self.pipeline.ingest(stale, now)
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.reason, "stale_event")
+
+    def test_pop_ready_orders_by_timestamp(self):
+        now = 10_000
+        late_arrival = self._turn_event("evt_2", 9_500)
+        early_arrival = self._turn_event("evt_1", 9_200)
+
+        self.pipeline.ingest(late_arrival, now)
+        self.pipeline.ingest(early_arrival, now)
+
+        ready = self.pipeline.pop_ready(now)
+        self.assertEqual([event.event_id for event in ready], ["evt_1", "evt_2"])
+
+    def test_reorder_window_holds_recent_events(self):
+        now = 10_000
+        # cutoff is 9700 when reorder window is 300
+        not_ready = self._turn_event("evt_new", 9_850)
+        self.pipeline.ingest(not_ready, now)
+        ready = self.pipeline.pop_ready(now)
+        self.assertEqual(ready, [])
+        self.assertEqual(self.pipeline.pending_count, 1)
+
+    def test_flush_all_returns_pending_events(self):
+        self.pipeline.ingest(self._turn_event("evt_1", 1_000), 1_100)
+        self.pipeline.ingest(self._turn_event("evt_2", 1_050), 1_100)
+        flushed = self.pipeline.flush_all()
+        self.assertEqual([event.event_id for event in flushed], ["evt_1", "evt_2"])
+        self.assertEqual(self.pipeline.pending_count, 0)
 
 
 if __name__ == "__main__":
