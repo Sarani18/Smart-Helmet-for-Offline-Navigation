@@ -634,6 +634,8 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(result["reason"], "route_data_required")
         self.assertIn("nav_mode", result)
         self.assertIn("degraded", result)
+        self.assertEqual(len(result["localization_control_commands"]), 2)
+        self.assertEqual(result["localization_control_commands"][0]["action"], "STOP")
 
     def test_ui_start_navigation_loads_route(self):
         payload = {
@@ -651,6 +653,44 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(result["nav_hint"]["expected_next_turn"], "RIGHT")
         self.assertIn("ui_state", result)
         self.assertEqual(result["ui_state"]["position_mode"], "GPS")
+        self.assertEqual(len(result["localization_control_commands"]), 2)
+        self.assertEqual(result["localization_control_commands"][0]["action"], "STOP")
+
+    def test_ui_stop_navigation_emits_stop_commands(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 4000,
+            "action_type": "STOP_NAVIGATION",
+            "payload": {},
+        }
+        result = asyncio.run(self.service.ingest_ui_action(payload))
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["reason"], "navigation_stopped")
+        self.assertEqual(len(result["localization_control_commands"]), 2)
+        self.assertEqual(result["localization_control_commands"][0]["action"], "STOP")
+
+    def test_ui_start_navigation_offline_emits_start_commands(self):
+        offline_service = NavigationAPIService(offline_after_failures=1, online_after_successes=1)
+        asyncio.run(
+            offline_service.update_connectivity_status(
+                {
+                    "session_id": "ride_1",
+                    "ts_ms": 1100,
+                    "network_available": False,
+                    "internet_reachable": False,
+                }
+            )
+        )
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1200,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        result = asyncio.run(offline_service.ingest_ui_action(payload, self.route_data))
+        self.assertTrue(result["accepted"])
+        self.assertEqual(len(result["localization_control_commands"]), 2)
+        self.assertEqual(result["localization_control_commands"][0]["action"], "START")
 
     def test_async_visual_event_ingestion(self):
         start_payload = {

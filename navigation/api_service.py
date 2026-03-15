@@ -137,6 +137,11 @@ class NavigationAPIService:
         by the caller (e.g. from maps backend response).
         """
         action = self._validator.parse_ui_action(payload)
+        action_commands = self._build_commands_for_ui_action(
+            session_id=action.session_id,
+            ts_ms=action.ts_ms,
+            action_type=action.action_type,
+        )
 
         if action.action_type == UIActionType.STOP_NAVIGATION:
             self._progress.reset()
@@ -157,6 +162,7 @@ class NavigationAPIService:
                 "degraded_reason": None,
                 "nav_hint": None,
                 "ui_state": ui_state,
+                "localization_control_commands": action_commands,
             }
 
         if action.action_type in (UIActionType.START_NAVIGATION, UIActionType.REROUTE_REQUEST):
@@ -171,6 +177,7 @@ class NavigationAPIService:
                     "nav_mode": nav_mode.value,
                     "degraded": degraded_reason is not None,
                     "degraded_reason": degraded_reason,
+                    "localization_control_commands": action_commands,
                 }
 
             route = self._route_processor.load_route(route_data)
@@ -198,6 +205,7 @@ class NavigationAPIService:
                 "degraded_reason": degraded_reason,
                 "nav_hint": nav_hint,
                 "ui_state": ui_state,
+                "localization_control_commands": action_commands,
             }
 
         degraded_reason = self._get_degraded_reason(action.ts_ms)
@@ -213,6 +221,7 @@ class NavigationAPIService:
             "degraded_reason": degraded_reason,
             "nav_hint": None,
             "ui_state": ui_state,
+            "localization_control_commands": action_commands,
         }
 
     async def update_connectivity_status(
@@ -478,6 +487,57 @@ class NavigationAPIService:
                 reason=reason,
             ),
         ]
+
+    def _build_commands_for_ui_action(
+        self,
+        session_id: str,
+        ts_ms: int,
+        action_type: UIActionType,
+    ) -> List[Dict[str, Any]]:
+        if action_type == UIActionType.STOP_NAVIGATION:
+            commands = self._build_localization_commands(
+                session_id=session_id,
+                ts_ms=ts_ms,
+                action=LocalizationControlAction.STOP,
+                reason="ui_stop_navigation",
+            )
+            return [
+                {
+                    "session_id": cmd.session_id,
+                    "ts_ms": cmd.ts_ms,
+                    "module": cmd.module.value,
+                    "action": cmd.action.value,
+                    "reason": cmd.reason,
+                }
+                for cmd in commands
+            ]
+
+        if action_type in (UIActionType.START_NAVIGATION, UIActionType.REROUTE_REQUEST):
+            if self._network_status == NetworkStatus.OFFLINE:
+                control_action = LocalizationControlAction.START
+                reason = "ui_navigation_offline"
+            else:
+                control_action = LocalizationControlAction.STOP
+                reason = "ui_navigation_online"
+
+            commands = self._build_localization_commands(
+                session_id=session_id,
+                ts_ms=ts_ms,
+                action=control_action,
+                reason=reason,
+            )
+            return [
+                {
+                    "session_id": cmd.session_id,
+                    "ts_ms": cmd.ts_ms,
+                    "module": cmd.module.value,
+                    "action": cmd.action.value,
+                    "reason": cmd.reason,
+                }
+                for cmd in commands
+            ]
+
+        return []
 
     @staticmethod
     def _now_ms() -> int:
