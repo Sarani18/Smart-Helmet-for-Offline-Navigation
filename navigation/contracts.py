@@ -47,6 +47,21 @@ class PositionMode(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class NetworkStatus(str, Enum):
+    ONLINE = "ONLINE"
+    OFFLINE = "OFFLINE"
+
+
+class LocalizationModuleType(str, Enum):
+    VISUAL = "VISUAL"
+    DEAD_RECKONING = "DEAD_RECKONING"
+
+
+class LocalizationControlAction(str, Enum):
+    START = "START"
+    STOP = "STOP"
+
+
 class UIActionType(str, Enum):
     START_NAVIGATION = "START_NAVIGATION"
     STOP_NAVIGATION = "STOP_NAVIGATION"
@@ -133,3 +148,20 @@ class UIActionMessage:
     ts_ms: int
     action_type: UIActionType
     payload: UIActionPayload
+
+
+@dataclass(frozen=True)
+class ConnectivityStatusMessage:
+    session_id: str
+    ts_ms: int
+    network_available: bool
+    internet_reachable: bool
+
+
+@dataclass(frozen=True)
+class LocalizationControlMessage:
+    session_id: str
+    ts_ms: int
+    module: LocalizationModuleType
+    action: LocalizationControlAction
+    reason: str

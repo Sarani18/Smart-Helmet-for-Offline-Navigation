@@ -17,6 +17,9 @@ from .contracts import (
 	LandmarkClass,
 	NavMode,
 	PositionMode,
+	NetworkStatus,
+	LocalizationModuleType,
+	LocalizationControlAction,
 	UIActionType,
 	TurnPayload,
 	LandmarkPayload,
@@ -28,10 +31,13 @@ from .contracts import (
 	RerouteRequestPayload,
 	EmptyPayload,
 	UIActionMessage,
+	ConnectivityStatusMessage,
+	LocalizationControlMessage,
 )
 from .event_validator import NavigationContractValidator, ContractValidationError
 from .event_pipeline import LocalizationEventPipeline, EventIngestResult
 from .route_progress import RouteProgressEngine, ProgressUpdate
+from .api_service import NavigationAPIService
 
 __all__ = [
 	"RouteProcessor",
@@ -43,6 +49,9 @@ __all__ = [
 	"LandmarkClass",
 	"NavMode",
 	"PositionMode",
+	"NetworkStatus",
+	"LocalizationModuleType",
+	"LocalizationControlAction",
 	"UIActionType",
 	"TurnPayload",
 	"LandmarkPayload",
@@ -54,10 +63,13 @@ __all__ = [
 	"RerouteRequestPayload",
 	"EmptyPayload",
 	"UIActionMessage",
+	"ConnectivityStatusMessage",
+	"LocalizationControlMessage",
 	"NavigationContractValidator",
 	"ContractValidationError",
 	"LocalizationEventPipeline",
 	"EventIngestResult",
 	"RouteProgressEngine",
 	"ProgressUpdate",
+	"NavigationAPIService",
 ]

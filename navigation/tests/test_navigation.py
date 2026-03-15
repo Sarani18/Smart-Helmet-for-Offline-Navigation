@@ -3,6 +3,7 @@ Unit tests for the Navigation & Route Intelligence Module.
 """
 
 import json
+import asyncio
 import os
 import sys
 import tempfile
@@ -35,6 +36,7 @@ from navigation.contracts import (
 from navigation.event_validator import NavigationContractValidator, ContractValidationError
 from navigation.event_pipeline import LocalizationEventPipeline
 from navigation.route_progress import RouteProgressEngine
+from navigation.api_service import NavigationAPIService
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +420,27 @@ class TestNavigationContractValidator(unittest.TestCase):
         with self.assertRaises(ContractValidationError):
             self.validator.parse_ui_action(payload)
 
+    def test_parse_connectivity_status_valid(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1_773_571_220_000,
+            "network_available": True,
+            "internet_reachable": False,
+        }
+        parsed = self.validator.parse_connectivity_status(payload)
+        self.assertTrue(parsed.network_available)
+        self.assertFalse(parsed.internet_reachable)
+
+    def test_parse_connectivity_status_invalid_type(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1_773_571_220_000,
+            "network_available": "yes",
+            "internet_reachable": False,
+        }
+        with self.assertRaises(ContractValidationError):
+            self.validator.parse_connectivity_status(payload)
+
 
 class TestLocalizationEventPipeline(unittest.TestCase):
 
@@ -575,6 +598,149 @@ class TestRouteProgressEngine(unittest.TestCase):
         result = engine.process_event(event)
         self.assertFalse(result.advanced)
         self.assertEqual(result.reason, "route_not_loaded")
+
+
+class TestNavigationAPIService(unittest.TestCase):
+
+    def setUp(self):
+        self.service = NavigationAPIService(
+            offline_after_failures=2,
+            online_after_successes=2,
+        )
+        self.route_data = {
+            "origin": {"lat": 19.076, "lon": 72.877, "label": "Home"},
+            "destination": {"lat": 19.100, "lon": 72.900, "label": "Airport"},
+            "steps": [
+                {"lat": 19.078, "lon": 72.879, "instruction": "Turn right", "distance": 300},
+            ],
+        }
+
+    def test_ui_start_navigation_requires_route_data(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1000,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        result = asyncio.run(self.service.ingest_ui_action(payload))
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["reason"], "route_data_required")
+
+    def test_ui_start_navigation_loads_route(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1001,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        result = asyncio.run(self.service.ingest_ui_action(payload, self.route_data))
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["reason"], "route_loaded")
+
+    def test_async_visual_event_ingestion(self):
+        start_payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1001,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        asyncio.run(self.service.ingest_ui_action(start_payload, self.route_data))
+
+        event_payload = {
+            "session_id": "ride_1",
+            "event_id": "evt_1",
+            "ts_ms": 1200,
+            "event_type": "TURN",
+            "confidence": 0.95,
+            "payload": {"turn_class": "RIGHT"},
+        }
+        result = asyncio.run(self.service.ingest_visual_event(event_payload, now_ts_ms=2000))
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["active_step_index"], 1)
+        self.assertTrue(result["destination_reached"])
+
+    def test_dead_reckoning_endpoint_is_placeholder(self):
+        result = asyncio.run(self.service.ingest_dead_reckoning_event({"dummy": 1}))
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["reason"], "dead_reckoning_not_enabled")
+
+    def test_connectivity_offline_transition_emits_start_commands(self):
+        payload_1 = {
+            "session_id": "ride_1",
+            "ts_ms": 2000,
+            "network_available": True,
+            "internet_reachable": False,
+        }
+        payload_2 = {
+            "session_id": "ride_1",
+            "ts_ms": 2100,
+            "network_available": False,
+            "internet_reachable": False,
+        }
+
+        first = asyncio.run(self.service.update_connectivity_status(payload_1))
+        second = asyncio.run(self.service.update_connectivity_status(payload_2))
+
+        self.assertFalse(first["status_changed"])
+        self.assertTrue(second["status_changed"])
+        self.assertEqual(second["network_status"], "OFFLINE")
+        self.assertEqual(len(second["commands"]), 2)
+        self.assertEqual(second["commands"][0]["action"], "START")
+
+    def test_connectivity_online_transition_emits_stop_commands(self):
+        # First move to OFFLINE.
+        asyncio.run(
+            self.service.update_connectivity_status(
+                {
+                    "session_id": "ride_1",
+                    "ts_ms": 3000,
+                    "network_available": False,
+                    "internet_reachable": False,
+                }
+            )
+        )
+        asyncio.run(
+            self.service.update_connectivity_status(
+                {
+                    "session_id": "ride_1",
+                    "ts_ms": 3100,
+                    "network_available": False,
+                    "internet_reachable": False,
+                }
+            )
+        )
+
+        # Then recover to ONLINE with hysteresis.
+        first = asyncio.run(
+            self.service.update_connectivity_status(
+                {
+                    "session_id": "ride_1",
+                    "ts_ms": 3200,
+                    "network_available": True,
+                    "internet_reachable": True,
+                }
+            )
+        )
+        second = asyncio.run(
+            self.service.update_connectivity_status(
+                {
+                    "session_id": "ride_1",
+                    "ts_ms": 3300,
+                    "network_available": True,
+                    "internet_reachable": True,
+                }
+            )
+        )
+
+        self.assertFalse(first["status_changed"])
+        self.assertTrue(second["status_changed"])
+        self.assertEqual(second["network_status"], "ONLINE")
+        self.assertEqual(len(second["commands"]), 2)
+        self.assertEqual(second["commands"][0]["action"], "STOP")
+
+    def test_connectivity_payload_validation(self):
+        with self.assertRaises(ContractValidationError):
+            asyncio.run(self.service.update_connectivity_status({"session_id": "ride_1"}))
 
 
 if __name__ == "__main__":

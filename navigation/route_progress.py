@@ -33,6 +33,13 @@ class RouteProgressEngine:
         self._route = route
         self._active_step_index = 0
 
+    def reset(self) -> None:
+        self._route = None
+        self._active_step_index = 0
+
+    def has_route(self) -> bool:
+        return self._route is not None
+
     def get_active_step_index(self) -> int:
         return self._active_step_index
 

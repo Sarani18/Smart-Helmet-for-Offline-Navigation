@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .contracts import (
+    ConnectivityStatusMessage,
     EventMessage,
     LandmarkClass,
     LandmarkPayload,
@@ -94,6 +95,31 @@ class NavigationContractValidator:
             ts_ms=ts_ms,
             action_type=action_type,
             payload=payload,
+        )
+
+    def parse_connectivity_status(self, data: Dict[str, Any]) -> ConnectivityStatusMessage:
+        self._require_fields(
+            data,
+            ["session_id", "ts_ms", "network_available", "internet_reachable"],
+            context="connectivity status",
+        )
+
+        session_id = self._as_non_empty_str(data["session_id"], "session_id")
+        ts_ms = self._as_non_negative_int(data["ts_ms"], "ts_ms")
+
+        network_available = data["network_available"]
+        internet_reachable = data["internet_reachable"]
+
+        if not isinstance(network_available, bool):
+            raise ContractValidationError("network_available must be a boolean")
+        if not isinstance(internet_reachable, bool):
+            raise ContractValidationError("internet_reachable must be a boolean")
+
+        return ConnectivityStatusMessage(
+            session_id=session_id,
+            ts_ms=ts_ms,
+            network_available=network_available,
+            internet_reachable=internet_reachable,
         )
 
     def _parse_localization_payload(
