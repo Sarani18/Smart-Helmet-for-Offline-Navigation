@@ -801,6 +801,8 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(second["commands"][0]["action"], "START")
         self.assertIn(second["nav_mode"], {"OFFLINE", "DEGRADED"})
         self.assertIn(second["ui_state"]["position_mode"], {"VISUAL", "UNKNOWN"})
+        self.assertEqual(second["mode_changed"], True)
+        self.assertIn(second["mode_reason"], {"network_offline", "low_confidence", "no_recent_localization_events"})
 
     def test_connectivity_online_transition_emits_stop_commands(self):
         # First move to OFFLINE.
@@ -853,6 +855,7 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(len(second["commands"]), 2)
         self.assertEqual(second["commands"][0]["action"], "STOP")
         self.assertIn(second["nav_mode"], {"ONLINE", "DEGRADED"})
+        self.assertEqual(second["mode_changed"], True)
 
     def test_connectivity_payload_validation(self):
         with self.assertRaises(ContractValidationError):
@@ -912,6 +915,76 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(result["nav_mode"], "DEGRADED")
         self.assertTrue(result["degraded"])
         self.assertEqual(result["degraded_reason"], "low_confidence")
+        self.assertEqual(result["mode_reason"], "low_confidence")
+        self.assertTrue(result["mode_changed"])
+
+    def test_mode_switches_back_from_degraded_to_online(self):
+        route_data = {
+            "origin": {"lat": 19.076, "lon": 72.877, "label": "Home"},
+            "destination": {"lat": 19.100, "lon": 72.900, "label": "Airport"},
+            "steps": [
+                {"lat": 19.078, "lon": 72.879, "instruction": "Turn right", "distance": 300},
+                {"lat": 19.085, "lon": 72.885, "instruction": "Turn left", "distance": 700},
+            ],
+        }
+        start_payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1000,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        asyncio.run(self.service.ingest_ui_action(start_payload, route_data))
+
+        # Push into degraded by repeated mismatches.
+        for idx, ts in enumerate([2000, 2300], start=1):
+            asyncio.run(
+                self.service.ingest_visual_event(
+                    {
+                        "session_id": "ride_1",
+                        "event_id": f"evt_bad_{idx}",
+                        "ts_ms": ts,
+                        "event_type": "TURN",
+                        "confidence": 0.9,
+                        "payload": {"turn_class": "LEFT"},
+                    },
+                    now_ts_ms=ts + 100,
+                )
+            )
+
+        # Recover with strong matching events.
+        first_recovery = asyncio.run(
+            self.service.ingest_visual_event(
+                {
+                    "session_id": "ride_1",
+                    "event_id": "evt_good_1",
+                    "ts_ms": 2600,
+                    "event_type": "TURN",
+                    "confidence": 1.0,
+                    "payload": {"turn_class": "RIGHT"},
+                },
+                now_ts_ms=2800,
+            )
+        )
+        self.assertIn(first_recovery["nav_mode"], {"ONLINE", "DEGRADED"})
+
+        recovered = asyncio.run(
+            self.service.ingest_visual_event(
+                {
+                    "session_id": "ride_1",
+                    "event_id": "evt_good_2",
+                    "ts_ms": 3000,
+                    "event_type": "TURN",
+                    "confidence": 1.0,
+                    "payload": {"turn_class": "LEFT"},
+                },
+                now_ts_ms=3200,
+            )
+        )
+
+        self.assertEqual(recovered["nav_mode"], "ONLINE")
+        self.assertFalse(recovered["degraded"])
+        self.assertEqual(recovered["mode_reason"], "network_online")
+        self.assertTrue(recovered["mode_changed"])
 
     def test_degraded_mode_on_no_recent_events_while_offline(self):
         service = NavigationAPIService(

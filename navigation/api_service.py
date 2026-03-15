@@ -70,6 +70,10 @@ class NavigationAPIService:
         self._active_session_id: Optional[str] = None
         self._route_polyline: List[tuple] = []
 
+        self._current_nav_mode: NavMode = NavMode.ONLINE
+        self._last_mode_reason: str = "network_online"
+        self._last_mode_transition_ts_ms: Optional[int] = None
+
     async def ingest_visual_event(
         self,
         payload: Dict[str, Any],
@@ -95,8 +99,8 @@ class NavigationAPIService:
                 self._confidence.update_from_event(ready, update)
                 updates.append(update)
 
-        degraded_reason = self._get_degraded_reason(now_ts_ms)
-        nav_mode = self._resolve_nav_mode(degraded_reason)
+        nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(now_ts_ms)
+        degraded_reason = mode_reason if nav_mode == NavMode.DEGRADED else None
         nav_hint = self._build_nav_hint(event.session_id, now_ts_ms)
         ui_state = self._build_ui_state(event.session_id, now_ts_ms)
 
@@ -109,7 +113,9 @@ class NavigationAPIService:
             "progress_reasons": [update.reason for update in updates],
             "confidence_score": self._confidence.get_score(),
             "nav_mode": nav_mode.value,
-            "degraded": degraded_reason is not None,
+            "mode_reason": mode_reason,
+            "mode_changed": mode_changed,
+            "degraded": nav_mode == NavMode.DEGRADED,
             "degraded_reason": degraded_reason,
             "nav_hint": nav_hint,
             "ui_state": ui_state,
@@ -154,15 +160,18 @@ class NavigationAPIService:
             self._last_nav_hint_signature = None
             self._route_polyline = []
             self._active_session_id = action.session_id
+            nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
             ui_state = self._build_ui_state(action.session_id, action.ts_ms)
             return {
                 "accepted": True,
                 "action_type": action.action_type.value,
                 "reason": "navigation_stopped",
                 "confidence_score": self._confidence.get_score(),
-                "nav_mode": self._resolve_nav_mode(None).value,
-                "degraded": False,
-                "degraded_reason": None,
+                "nav_mode": nav_mode.value,
+                "mode_reason": mode_reason,
+                "mode_changed": mode_changed,
+                "degraded": nav_mode == NavMode.DEGRADED,
+                "degraded_reason": mode_reason if nav_mode == NavMode.DEGRADED else None,
                 "nav_hint": None,
                 "ui_state": ui_state,
                 "localization_control_commands": action_commands,
@@ -177,16 +186,17 @@ class NavigationAPIService:
                     route_source = "cache"
 
             if route_data is None:
-                degraded_reason = self._get_degraded_reason(action.ts_ms)
-                nav_mode = self._resolve_nav_mode(degraded_reason)
+                nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
                 return {
                     "accepted": False,
                     "action_type": action.action_type.value,
                     "reason": "route_data_required",
                     "confidence_score": self._confidence.get_score(),
                     "nav_mode": nav_mode.value,
-                    "degraded": degraded_reason is not None,
-                    "degraded_reason": degraded_reason,
+                    "mode_reason": mode_reason,
+                    "mode_changed": mode_changed,
+                    "degraded": nav_mode == NavMode.DEGRADED,
+                    "degraded_reason": mode_reason if nav_mode == NavMode.DEGRADED else None,
                     "localization_control_commands": action_commands,
                 }
 
@@ -201,8 +211,7 @@ class NavigationAPIService:
             self._active_session_id = action.session_id
             self._route_polyline = self._extract_route_polyline(route_data)
 
-            degraded_reason = self._get_degraded_reason(action.ts_ms)
-            nav_mode = self._resolve_nav_mode(degraded_reason)
+            nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
             nav_hint = self._build_nav_hint(action.session_id, action.ts_ms)
             ui_state = self._build_ui_state(action.session_id, action.ts_ms)
 
@@ -215,15 +224,16 @@ class NavigationAPIService:
                 "active_step_index": self._progress.get_active_step_index(),
                 "confidence_score": self._confidence.get_score(),
                 "nav_mode": nav_mode.value,
-                "degraded": degraded_reason is not None,
-                "degraded_reason": degraded_reason,
+                "mode_reason": mode_reason,
+                "mode_changed": mode_changed,
+                "degraded": nav_mode == NavMode.DEGRADED,
+                "degraded_reason": mode_reason if nav_mode == NavMode.DEGRADED else None,
                 "nav_hint": nav_hint,
                 "ui_state": ui_state,
                 "localization_control_commands": action_commands,
             }
 
-        degraded_reason = self._get_degraded_reason(action.ts_ms)
-        nav_mode = self._resolve_nav_mode(degraded_reason)
+        nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
         ui_state = self._build_ui_state(action.session_id, action.ts_ms)
         return {
             "accepted": False,
@@ -231,8 +241,10 @@ class NavigationAPIService:
             "reason": "unsupported_action",
             "confidence_score": self._confidence.get_score(),
             "nav_mode": nav_mode.value,
-            "degraded": degraded_reason is not None,
-            "degraded_reason": degraded_reason,
+            "mode_reason": mode_reason,
+            "mode_changed": mode_changed,
+            "degraded": nav_mode == NavMode.DEGRADED,
+            "degraded_reason": mode_reason if nav_mode == NavMode.DEGRADED else None,
             "nav_hint": None,
             "ui_state": ui_state,
             "localization_control_commands": action_commands,
@@ -293,8 +305,7 @@ class NavigationAPIService:
                     reason="network_offline",
                 )
 
-        degraded_reason = self._get_degraded_reason(status.ts_ms)
-        nav_mode = self._resolve_nav_mode(degraded_reason)
+        nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(status.ts_ms)
         session_id = self._active_session_id or status.session_id
         ui_state = self._build_ui_state(session_id, status.ts_ms)
 
@@ -320,8 +331,10 @@ class NavigationAPIService:
                 "online_after_successes": self._online_after_successes,
             },
             "nav_mode": nav_mode.value,
-            "degraded": degraded_reason is not None,
-            "degraded_reason": degraded_reason,
+            "mode_reason": mode_reason,
+            "mode_changed": mode_changed,
+            "degraded": nav_mode == NavMode.DEGRADED,
+            "degraded_reason": mode_reason if nav_mode == NavMode.DEGRADED else None,
             "ui_state": ui_state,
         }
 
@@ -352,7 +365,25 @@ class NavigationAPIService:
     def network_status(self) -> NetworkStatus:
         return self._network_status
 
+    def _compute_nav_mode(self, now_ts_ms: int) -> tuple[NavMode, str]:
+        degraded_reason = self._get_degraded_reason(now_ts_ms)
+        if degraded_reason is not None:
+            return NavMode.DEGRADED, degraded_reason
+        if self._network_status == NetworkStatus.OFFLINE:
+            return NavMode.OFFLINE, "network_offline"
+        return NavMode.ONLINE, "network_online"
+
+    def _refresh_nav_mode(self, now_ts_ms: int) -> tuple[NavMode, str, bool]:
+        mode, reason = self._compute_nav_mode(now_ts_ms)
+        changed = mode != self._current_nav_mode
+        if changed:
+            self._last_mode_transition_ts_ms = now_ts_ms
+        self._current_nav_mode = mode
+        self._last_mode_reason = reason
+        return mode, reason, changed
+
     def _resolve_nav_mode(self, degraded_reason: Optional[str]) -> NavMode:
+        # Backward-compatible helper used by UI-state builder.
         if degraded_reason is not None:
             return NavMode.DEGRADED
         if self._network_status == NetworkStatus.OFFLINE:
