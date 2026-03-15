@@ -15,6 +15,24 @@ from navigation.route_processor import RouteProcessor, Route
 from navigation.map_manager import MapManager
 from navigation.turn_extractor import TurnExtractor
 from navigation.offline_cache import OfflineCache
+from navigation.contracts import (
+    LocalizationEventType,
+    TurnClass,
+    LandmarkClass,
+    NavMode,
+    PositionMode,
+    UIActionType,
+    TurnPayload,
+    LandmarkPayload,
+    SignboardPayload,
+    EventMessage,
+    NavHintMessage,
+    UIStateMessage,
+    StartNavigationPayload,
+    RerouteRequestPayload,
+    UIActionMessage,
+)
+from navigation.event_validator import NavigationContractValidator, ContractValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +251,170 @@ class TestOfflineCache(unittest.TestCase):
 
     def test_delete_nonexistent_returns_false(self):
         self.assertFalse(self.cache.delete_route("ghost_route"))
+
+
+# ---------------------------------------------------------------------------
+# Contracts tests
+# ---------------------------------------------------------------------------
+
+class TestContracts(unittest.TestCase):
+
+    def test_event_message_with_turn_payload(self):
+        message = EventMessage(
+            session_id="ride_1",
+            event_id="evt_1",
+            ts_ms=1_773_571_234_567,
+            event_type=LocalizationEventType.TURN,
+            confidence=0.9,
+            payload=TurnPayload(turn_class=TurnClass.RIGHT),
+            heading_deg=86.0,
+        )
+        self.assertEqual(message.event_type, LocalizationEventType.TURN)
+        self.assertEqual(message.payload.turn_class, TurnClass.RIGHT)
+
+    def test_event_message_with_landmark_payload(self):
+        message = EventMessage(
+            session_id="ride_1",
+            event_id="evt_2",
+            ts_ms=1_773_571_236_120,
+            event_type=LocalizationEventType.LANDMARK,
+            confidence=0.75,
+            payload=LandmarkPayload(
+                landmark_class=LandmarkClass.BRIDGE,
+                map_hint_name="Flyover",
+            ),
+        )
+        self.assertEqual(message.payload.landmark_class, LandmarkClass.BRIDGE)
+
+    def test_event_message_with_signboard_payload(self):
+        message = EventMessage(
+            session_id="ride_1",
+            event_id="evt_3",
+            ts_ms=1_773_571_237_000,
+            event_type=LocalizationEventType.SIGNBOARD,
+            confidence=0.81,
+            payload=SignboardPayload(text="Airport Left", direction_hint=TurnClass.LEFT),
+        )
+        self.assertEqual(message.payload.text, "Airport Left")
+        self.assertEqual(message.payload.direction_hint, TurnClass.LEFT)
+
+    def test_nav_hint_message(self):
+        hint = NavHintMessage(
+            session_id="ride_1",
+            ts_ms=1_773_571_237_100,
+            expected_next_turn=TurnClass.RIGHT,
+            distance_to_next_turn_m=120.0,
+        )
+        self.assertEqual(hint.expected_next_turn, TurnClass.RIGHT)
+
+    def test_ui_state_message(self):
+        state = UIStateMessage(
+            session_id="ride_1",
+            ts_ms=1_773_571_240_000,
+            nav_mode=NavMode.OFFLINE,
+            position_mode=PositionMode.VISUAL,
+            next_instruction_text="In 120 m, turn right",
+            distance_to_next_m=120.0,
+            confidence=0.78,
+            off_route_flag=False,
+            destination_reached_flag=False,
+            active_step_index=5,
+            route_polyline=[(19.0760, 72.8777), (19.0768, 72.8790)],
+        )
+        self.assertEqual(state.nav_mode, NavMode.OFFLINE)
+        self.assertEqual(state.position_mode, PositionMode.VISUAL)
+
+    def test_ui_action_messages(self):
+        start_action = UIActionMessage(
+            session_id="ride_1",
+            ts_ms=1_773_571_200_000,
+            action_type=UIActionType.START_NAVIGATION,
+            payload=StartNavigationPayload(origin="VNIT Nagpur", destination="Nagpur Airport"),
+        )
+        reroute_action = UIActionMessage(
+            session_id="ride_1",
+            ts_ms=1_773_571_260_000,
+            action_type=UIActionType.REROUTE_REQUEST,
+            payload=RerouteRequestPayload(reason="off_route"),
+        )
+        self.assertEqual(start_action.action_type, UIActionType.START_NAVIGATION)
+        self.assertEqual(reroute_action.action_type, UIActionType.REROUTE_REQUEST)
+
+
+class TestNavigationContractValidator(unittest.TestCase):
+
+    def setUp(self):
+        self.validator = NavigationContractValidator()
+
+    def test_parse_localization_turn_event(self):
+        payload = {
+            "session_id": "ride_1",
+            "event_id": "evt_1",
+            "ts_ms": 1_773_571_234_567,
+            "event_type": "TURN",
+            "confidence": 0.91,
+            "payload": {"turn_class": "RIGHT"},
+        }
+        parsed = self.validator.parse_localization_event(payload)
+        self.assertEqual(parsed.event_type, LocalizationEventType.TURN)
+        self.assertEqual(parsed.payload.turn_class, TurnClass.RIGHT)
+
+    def test_parse_localization_invalid_confidence(self):
+        payload = {
+            "session_id": "ride_1",
+            "event_id": "evt_1",
+            "ts_ms": 1_773_571_234_567,
+            "event_type": "TURN",
+            "confidence": 1.2,
+            "payload": {"turn_class": "RIGHT"},
+        }
+        with self.assertRaises(ContractValidationError):
+            self.validator.parse_localization_event(payload)
+
+    def test_parse_localization_missing_required_field(self):
+        payload = {
+            "session_id": "ride_1",
+            "event_id": "evt_1",
+            "event_type": "SIGNBOARD",
+            "confidence": 0.81,
+            "payload": {"text": "Airport Left"},
+        }
+        with self.assertRaises(ContractValidationError):
+            self.validator.parse_localization_event(payload)
+
+    def test_parse_ui_action_start_navigation(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1_773_571_200_000,
+            "action_type": "START_NAVIGATION",
+            "payload": {
+                "origin": "VNIT Nagpur",
+                "destination": "Nagpur Airport",
+            },
+        }
+        parsed = self.validator.parse_ui_action(payload)
+        self.assertEqual(parsed.action_type, UIActionType.START_NAVIGATION)
+        self.assertEqual(parsed.payload.origin, "VNIT Nagpur")
+
+    def test_parse_ui_action_stop_navigation(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1_773_571_210_000,
+            "action_type": "STOP_NAVIGATION",
+            "payload": {},
+        }
+        parsed = self.validator.parse_ui_action(payload)
+        self.assertEqual(parsed.action_type, UIActionType.STOP_NAVIGATION)
+
+    def test_parse_ui_action_invalid_enum_value(self):
+        payload = {
+            "session_id": "ride_1",
+            "ts_ms": 1_773_571_220_000,
+            "action_type": "PAUSE_NAVIGATION",
+            "payload": {},
+        }
+        with self.assertRaises(ContractValidationError):
+            self.validator.parse_ui_action(payload)
 
 
 if __name__ == "__main__":
