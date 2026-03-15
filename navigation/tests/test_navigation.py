@@ -610,7 +610,9 @@ class TestRouteProgressEngine(unittest.TestCase):
 class TestNavigationAPIService(unittest.TestCase):
 
     def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
         self.service = NavigationAPIService(
+            offline_cache=OfflineCache(cache_dir=self.tmpdir),
             offline_after_failures=2,
             online_after_successes=2,
         )
@@ -647,6 +649,7 @@ class TestNavigationAPIService(unittest.TestCase):
         result = asyncio.run(self.service.ingest_ui_action(payload, self.route_data))
         self.assertTrue(result["accepted"])
         self.assertEqual(result["reason"], "route_loaded")
+        self.assertEqual(result["route_source"], "live")
         self.assertEqual(result["nav_mode"], "ONLINE")
         self.assertFalse(result["degraded"])
         self.assertIsNotNone(result["nav_hint"])
@@ -691,6 +694,25 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertTrue(result["accepted"])
         self.assertEqual(len(result["localization_control_commands"]), 2)
         self.assertEqual(result["localization_control_commands"][0]["action"], "START")
+
+    def test_ui_start_navigation_loads_from_cache(self):
+        payload = {
+            "session_id": "ride_cached",
+            "ts_ms": 5000,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+
+        # First call caches live route data.
+        first = asyncio.run(self.service.ingest_ui_action(payload, self.route_data))
+        self.assertTrue(first["accepted"])
+        self.assertEqual(first["route_source"], "live")
+
+        # Second call simulates missing live route_data and should use cache.
+        second = asyncio.run(self.service.ingest_ui_action(payload, route_data=None))
+        self.assertTrue(second["accepted"])
+        self.assertEqual(second["reason"], "route_loaded_from_cache")
+        self.assertEqual(second["route_source"], "cache")
 
     def test_async_visual_event_ingestion(self):
         start_payload = {

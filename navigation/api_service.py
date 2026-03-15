@@ -28,6 +28,7 @@ from .contracts import (
 from .confidence_tracker import NavigationConfidenceTracker
 from .event_pipeline import LocalizationEventPipeline
 from .event_validator import NavigationContractValidator
+from .offline_cache import OfflineCache
 from .route_processor import RouteProcessor
 from .route_progress import ProgressUpdate, RouteProgressEngine
 
@@ -41,6 +42,7 @@ class NavigationAPIService:
         pipeline: Optional[LocalizationEventPipeline] = None,
         progress_engine: Optional[RouteProgressEngine] = None,
         route_processor: Optional[RouteProcessor] = None,
+        offline_cache: Optional[OfflineCache] = None,
         confidence_tracker: Optional[NavigationConfidenceTracker] = None,
         offline_after_failures: int = 2,
         online_after_successes: int = 2,
@@ -51,6 +53,7 @@ class NavigationAPIService:
         self._pipeline = pipeline or LocalizationEventPipeline()
         self._progress = progress_engine or RouteProgressEngine()
         self._route_processor = route_processor or RouteProcessor()
+        self._offline_cache = offline_cache or OfflineCache()
         self._confidence = confidence_tracker or NavigationConfidenceTracker()
 
         self._network_status = NetworkStatus.ONLINE
@@ -166,6 +169,13 @@ class NavigationAPIService:
             }
 
         if action.action_type in (UIActionType.START_NAVIGATION, UIActionType.REROUTE_REQUEST):
+            route_source = "live"
+            if route_data is None:
+                cache_key = self._cache_key(action.session_id)
+                route_data = self._offline_cache.load_route(cache_key)
+                if route_data is not None:
+                    route_source = "cache"
+
             if route_data is None:
                 degraded_reason = self._get_degraded_reason(action.ts_ms)
                 nav_mode = self._resolve_nav_mode(degraded_reason)
@@ -179,6 +189,9 @@ class NavigationAPIService:
                     "degraded_reason": degraded_reason,
                     "localization_control_commands": action_commands,
                 }
+
+            # Cache route so route recovery works when network data is absent.
+            self._offline_cache.save_route(self._cache_key(action.session_id), route_data)
 
             route = self._route_processor.load_route(route_data)
             self._progress.load_route(route)
@@ -196,7 +209,8 @@ class NavigationAPIService:
             return {
                 "accepted": True,
                 "action_type": action.action_type.value,
-                "reason": "route_loaded",
+                "reason": "route_loaded" if route_source == "live" else "route_loaded_from_cache",
+                "route_source": route_source,
                 "step_count": len(route.steps),
                 "active_step_index": self._progress.get_active_step_index(),
                 "confidence_score": self._confidence.get_score(),
@@ -432,6 +446,10 @@ class NavigationAPIService:
                 polyline.append(destination_pt)
 
         return polyline
+
+    @staticmethod
+    def _cache_key(session_id: str) -> str:
+        return f"route_{session_id}"
 
     def _build_nav_hint(self, session_id: str, ts_ms: int) -> Optional[Dict[str, Any]]:
         expected_turn = self._progress.get_expected_next_turn()
