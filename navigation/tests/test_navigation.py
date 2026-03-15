@@ -34,6 +34,7 @@ from navigation.contracts import (
 )
 from navigation.event_validator import NavigationContractValidator, ContractValidationError
 from navigation.event_pipeline import LocalizationEventPipeline
+from navigation.route_progress import RouteProgressEngine
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +481,100 @@ class TestLocalizationEventPipeline(unittest.TestCase):
         flushed = self.pipeline.flush_all()
         self.assertEqual([event.event_id for event in flushed], ["evt_1", "evt_2"])
         self.assertEqual(self.pipeline.pending_count, 0)
+
+
+class TestRouteProgressEngine(unittest.TestCase):
+
+    def setUp(self):
+        self.engine = RouteProgressEngine()
+        processor = RouteProcessor()
+        route_data = {
+            "origin": {"lat": 19.076, "lon": 72.877, "label": "Home"},
+            "destination": {"lat": 19.100, "lon": 72.900, "label": "Airport"},
+            "steps": [
+                {"lat": 19.078, "lon": 72.879, "instruction": "Turn right", "distance": 300},
+                {"lat": 19.085, "lon": 72.885, "instruction": "At traffic light turn left", "distance": 700},
+            ],
+        }
+        self.route = processor.load_route(route_data)
+        self.engine.load_route(self.route)
+
+    def test_advance_on_matching_turn_event(self):
+        event = EventMessage(
+            session_id="ride_1",
+            event_id="evt_turn_1",
+            ts_ms=1000,
+            event_type=LocalizationEventType.TURN,
+            confidence=0.9,
+            payload=TurnPayload(turn_class=TurnClass.RIGHT),
+        )
+        result = self.engine.process_event(event)
+        self.assertTrue(result.advanced)
+        self.assertEqual(result.active_step_index, 1)
+
+    def test_no_advance_on_non_matching_turn_event(self):
+        event = EventMessage(
+            session_id="ride_1",
+            event_id="evt_turn_2",
+            ts_ms=1001,
+            event_type=LocalizationEventType.TURN,
+            confidence=0.9,
+            payload=TurnPayload(turn_class=TurnClass.LEFT),
+        )
+        result = self.engine.process_event(event)
+        self.assertFalse(result.advanced)
+        self.assertEqual(result.active_step_index, 0)
+
+    def test_advance_on_matching_signboard_direction(self):
+        sign_event = EventMessage(
+            session_id="ride_1",
+            event_id="evt_sign_1",
+            ts_ms=1002,
+            event_type=LocalizationEventType.SIGNBOARD,
+            confidence=0.8,
+            payload=SignboardPayload(text="Airport Right"),
+        )
+        result = self.engine.process_event(sign_event)
+        self.assertTrue(result.advanced)
+
+    def test_advance_on_landmark_hint(self):
+        # First progress to second step.
+        self.engine.process_event(
+            EventMessage(
+                session_id="ride_1",
+                event_id="evt_turn_3",
+                ts_ms=1003,
+                event_type=LocalizationEventType.TURN,
+                confidence=0.9,
+                payload=TurnPayload(turn_class=TurnClass.RIGHT),
+            )
+        )
+        # Step text contains "traffic light" so this should match.
+        landmark_event = EventMessage(
+            session_id="ride_1",
+            event_id="evt_lm_1",
+            ts_ms=1004,
+            event_type=LocalizationEventType.LANDMARK,
+            confidence=0.85,
+            payload=LandmarkPayload(landmark_class=LandmarkClass.TRAFFIC_LIGHT),
+        )
+        result = self.engine.process_event(landmark_event)
+        self.assertTrue(result.advanced)
+        self.assertTrue(result.destination_reached)
+
+    def test_process_without_route_loaded(self):
+        engine = RouteProgressEngine()
+        event = EventMessage(
+            session_id="ride_1",
+            event_id="evt_turn_4",
+            ts_ms=1005,
+            event_type=LocalizationEventType.TURN,
+            confidence=0.9,
+            payload=TurnPayload(turn_class=TurnClass.RIGHT),
+        )
+        result = engine.process_event(event)
+        self.assertFalse(result.advanced)
+        self.assertEqual(result.reason, "route_not_loaded")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ from .contracts import (
 )
 from .event_validator import NavigationContractValidator, ContractValidationError
 from .event_pipeline import LocalizationEventPipeline, EventIngestResult
+from .route_progress import RouteProgressEngine, ProgressUpdate
 
 __all__ = [
 	"RouteProcessor",
@@ -57,4 +58,6 @@ __all__ = [
 	"ContractValidationError",
 	"LocalizationEventPipeline",
 	"EventIngestResult",
+	"RouteProgressEngine",
+	"ProgressUpdate",
 ]
