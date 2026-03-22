@@ -1,11 +1,20 @@
 # Vision Module (Mock Pipeline)
 
-This module provides the Computer Vision (CV) interface for the Smart Helmet navigation system. In this mock version, it simulates a vision pipeline that "detects" route features based on navigation hints.
+This module provides the Computer Vision (CV) interface for the Smart Helmet navigation system. It analyzes camera frames through multiple concurrent pipelines (e.g., scene detection for turns/intersections, object detection for traffic signals) and reports all recognized features to the Navigation module.
+
+## Architectural Behavior
+
+1. **Autonomous Processing**: Vision continuously processes camera frames. It does not wait for navigation hints to start detecting. 
+2. **Continuous Reporting**: The Vision module sends *everything* it detects (turns, signals, intersections, etc.), even if the detections are unexpected or not part of the current route list. It is up to the Navigation/Control module to accept or reject this data.
+3. **Weight Adjustment via Nav Hints**: When the Navigation module sends a `/nav-hint`, it merely informs the Vision module of the `expected_next_turn`. Vision uses this hint *only* to adjust internal weights/confidences (e.g., if approaching a known intersection, the threshold for classifying "LEFT" might be lowered slightly). It does **not** act as a filter.
+4. **Multiple Pipelines per Frame**: A single frame might contain multiple features (e.g., both an intersection and a traffic signal). Vision runs multiple models simultaneously and will report objects as they are identified, sequentially.
+
+---
 
 ## API Endpoints
 
 ### 1. Receive Navigation Hint
-The Navigation module (Sanskruti) should hit this endpoint whenever there is a change in the expected maneuver or distance.
+The Navigation module (Sanskruti) should hit this endpoint whenever there is a change in the expected maneuver.
 
 - **Endpoint:** `POST /api/localization/nav-hint`
 - **Payload Format:** JSON
@@ -29,7 +38,7 @@ The Navigation module (Sanskruti) should hit this endpoint whenever there is a c
 ---
 
 ### 2. Receive Camera Frame
-The hardware/camera bridge hits this endpoint to provide raw visual data.
+The hardware/camera bridge hits this endpoint to provide raw visual data. **This is what triggers the detection pipelines.**
 
 - **Endpoint:** `POST /api/localization/frame`
 - **Payload Format:** Multipart/Form-Data
@@ -38,13 +47,11 @@ The hardware/camera bridge hits this endpoint to provide raw visual data.
   - `ts_ms` (form-data integer, optional): Frame capture timestamp.
   - `image` (file): Binary image data (JPEG/PNG).
 
-*Note: In this dummy version, frames are logged and discarded.*
-
 ---
 
 ## Outbound Communication (Vision -> Navigation)
 
-When the Vision module "detects" a feature (simulated by a 5-second timer in this mock), it will POST a `visual-event` back to the Navigation module.
+When the Vision module detects a feature (e.g., processing a frame), it will POST a `visual-event` back to the Navigation module.
 
 - **Target Endpoint:** `POST /api/navigation/localization/visual-event`
 - **Expected Payload:**

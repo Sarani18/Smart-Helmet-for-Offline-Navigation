@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import httpx
 import logging
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # --- API Models ---
@@ -27,53 +27,90 @@ router = APIRouter(prefix="/api/localization", tags=["Localization"])
 # Mock navigation API endpoint. If needed, the actual URL can be provided here.
 NAV_API_URL = "http://127.0.0.1:8000/api/navigation/localization/visual-event"
 
+# Global state to simulate internal weighting for CV detection modules
+# The 'distance_m' helps the module know how soon the turn should be appearing 
+# (e.g. at 50m we expect it to start entering the frame, at 10m it should be very prominent).
+current_nav_hint = "STRAIGHT"
+current_distance_m = 0.0
+
 # --- Dummy CV Pipeline ---
-async def dummy_vision_pipeline(session_id: str, expected_turn: str):
+async def process_frame_pipeline(session_id: str, ts_ms: int):
     """
-    Mock pipeline that simulates processing time (e.g. tracking features),
-    and then immediately sends a visual-event to navigation indicating
-    the expected feature was detected.
+    Mock pipeline that simulates processing a camera frame sequentially.
+    Actual CV code would run inferences here like:
+      - Scene Detection (Turns, Intersections)
+      - Object Detection (Traffic Lights, Stop Signs, Potholes)
+      - Depth / Distance Estimation
+      
+    This function will report everything it detects, irrespective of the hint,
+    giving the Navigation controller all the data it needs to reason about the environment.
     """
-    logger.info(f"[Vision Dummy] Processing 'nav-hint': waiting 5 seconds before artificially discovering '{expected_turn}'.")
-    await asyncio.sleep(5.0)
+    logger.debug(
+        f"[Vision] Processing frame at ts={ts_ms}. Internal CV thresholds adjusted for "
+        f"'{current_nav_hint}' expected in {current_distance_m}m."
+    )
+    await asyncio.sleep(1.0) # simulate inference time
     
-    # payload as prescribed by INTEGRATION_CONSIDERATIONS.md
-    payload = {
+    # 1. Simulate finding an unexpected feature first (e.g., an intersection)
+    unexpected = "LEFT" if current_nav_hint != "LEFT" else "RIGHT"
+    payload1 = {
         "session_id": session_id,
-        "event_id": f"evt_{int(time.time() * 1000)}",
+        "event_id": f"evt_{int(time.time() * 1000)}_1",
         "ts_ms": int(time.time() * 1000),
         "event_type": "TURN",
-        "confidence": 0.95,
+        "confidence": 0.60, # Lower confidence because it wasn't hinted
         "payload": {
-            "turn_class": expected_turn
+            "turn_class": unexpected
         }
     }
     
-    logger.info(f"[Vision Dummy] Timer expired. Publishing '{expected_turn}' to Navigation.")
+    # 2. Simulate finding the expected feature a moment later
+    payload2 = {
+        "session_id": session_id,
+        "event_id": f"evt_{int(time.time() * 1000)}_2",
+        "ts_ms": int(time.time() * 1000),
+        "event_type": "TURN",
+        "confidence": 0.95, # Higher confidence because it was hinted
+        "payload": {
+            "turn_class": current_nav_hint
+        }
+    }
     
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(NAV_API_URL, json=payload)
-            response.raise_for_status()
-            logger.info("[Vision Dummy] Successfully submitted visual-event mock.")
+            logger.info(f"[Vision Dummy] Emitting unexpected detection: {unexpected}")
+            await client.post(NAV_API_URL, json=payload1)
+            
+            await asyncio.sleep(0.5) # Slight delay between detections
+            
+            logger.info(f"[Vision Dummy] Emitting expected detection: {current_nav_hint}")
+            await client.post(NAV_API_URL, json=payload2)
+            
         except Exception as e:
-            logger.error(f"[Vision Dummy] Failed to push event to Navigation API: {e}. Is the Navigation API server running at {NAV_API_URL}?")
+            logger.error(f"[Vision Dummy] Failed to push event to Navigation API: {e}")
+
 
 
 # --- Endpoints ---
 @router.post("/nav-hint", response_model=ActionResponse)
-async def receive_nav_hint(hint: NavHintMessage, background_tasks: BackgroundTasks):
+async def receive_nav_hint(hint: NavHintMessage):
     """
-    Called by Navigation (Sanskruti) -> Localization (Vijit)
-    Sends an expected maneuver alert.
-    Triggers the mock CV pipeline in the background.
+    Called by Navigation System. Provides context regarding what map feature is approaching.
+    
+    IMPORTANT: The Vision module uses this data strictly to alter detection sensitivity 
+    (e.g., lower the confidence threshold required to confirm a 'LEFT' turn).
+    It does NOT restrict the Vision module to ONLY return the expected turn.
     """
-    # Start the dummy detection logic
-    background_tasks.add_task(
-        dummy_vision_pipeline, 
-        session_id=hint.session_id, 
-        expected_turn=hint.expected_next_turn
+    global current_nav_hint, current_distance_m
+    current_nav_hint = hint.expected_next_turn
+    current_distance_m = hint.distance_to_next_turn_m
+    
+    logger.debug(
+        f"[Vision] Received /nav-hint. Internal state updated: "
+        f"Prioritize '{current_nav_hint}' at {current_distance_m} meters."
     )
+    
+    # Note: No pipeline is triggered here. The CV runs continuously on frames.
     return ActionResponse(status="success", message="Navigation hints updated")
 
 
@@ -86,13 +123,19 @@ async def receive_camera_frame(
 ):
     """
     Called by MCU/Camera bridge -> Localization (Vijit)
-    In this dummy implementation, frames are received and silently ignored.
+    This triggers the actual vision pipelines (e.g., scene detection, object detection).
     """
     if not ts_ms:
         ts_ms = int(time.time() * 1000)
         
-    logger.info(f"[Vision Dummy] Received frame for session_id {session_id} but dropping it to /dev/null.")
-    return ActionResponse(status="queued", message="Frame processing started (mocked, no-op)")
+    # Start the dummy detection processing for this frame
+    background_tasks.add_task(
+        process_frame_pipeline, 
+        session_id=session_id, 
+        ts_ms=ts_ms
+    )
+    
+    return ActionResponse(status="queued", message="Frame processing started")
 
 # Register router
 app.include_router(router)
