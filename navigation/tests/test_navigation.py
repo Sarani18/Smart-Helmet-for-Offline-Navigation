@@ -171,6 +171,76 @@ class TestMapManager(unittest.TestCase):
         # Bounding box nowhere near Mumbai
         self.assertFalse(self.manager.has_offline_coverage((28.0, 76.0, 29.0, 78.0)))
 
+    def test_prefetch_route_tiles_downloads_to_local_cache(self):
+        manager = MapManager(map_data_dir=self.tmpdir)
+        manager.configure_tile_download(
+            zoom_levels=[14],
+            tile_fetcher=lambda _url: b"fake-png-bytes",
+        )
+
+        waypoints = [
+            {"lat": 19.0760, "lon": 72.8777},
+            {"lat": 19.0768, "lon": 72.8790},
+        ]
+        ok = manager.prefetch_route_tiles(waypoints)
+
+        self.assertTrue(ok)
+        self.assertGreater(manager.cached_tile_count(), 0)
+
+    def test_prefetch_route_tiles_rejects_invalid_waypoints(self):
+        manager = MapManager(map_data_dir=self.tmpdir)
+        manager.configure_tile_download(tile_fetcher=lambda _url: b"x")
+
+        self.assertFalse(manager.prefetch_route_tiles([]))
+        self.assertFalse(manager.prefetch_route_tiles([{"lat": 19.0}]))
+
+    def test_cache_limit_evicts_oldest_tiles(self):
+        manager = MapManager(map_data_dir=self.tmpdir)
+        manager.configure_tile_download(
+            max_cache_size_mb=0.003,
+        )
+
+        # Create three tile files of 2 KB each = 6 KB total.
+        tile_paths = []
+        for idx in range(3):
+            tile_path = os.path.join(self.tmpdir, "tiles", "14", str(idx), "1.png")
+            os.makedirs(os.path.dirname(tile_path), exist_ok=True)
+            with open(tile_path, "wb") as fh:
+                fh.write(b"x" * 2048)
+            tile_paths.append(tile_path)
+
+        # Make deterministic age ordering (idx 0 oldest).
+        base_ts = 1_700_000_000
+        for idx, path in enumerate(tile_paths):
+            ts = base_ts + idx
+            os.utime(path, (ts, ts))
+
+        evicted = manager.enforce_cache_limits()
+        self.assertGreaterEqual(evicted, 2)
+        self.assertLessEqual(manager.cache_size_bytes(), int(0.003 * 1024 * 1024))
+
+    def test_evict_session_tiles_removes_session_files(self):
+        manager = MapManager(map_data_dir=self.tmpdir)
+        manager.configure_tile_download(
+            zoom_levels=[14],
+            tile_fetcher=lambda _url: b"fake-png-bytes",
+        )
+
+        manager.prefetch_route_tiles(
+            [
+                {"lat": 19.0760, "lon": 72.8777},
+                {"lat": 19.0768, "lon": 72.8790},
+            ],
+            session_id="ride_session_1",
+        )
+        before = manager.cached_tile_count()
+        deleted = manager.evict_session_tiles("ride_session_1")
+        after = manager.cached_tile_count()
+
+        self.assertGreater(before, 0)
+        self.assertGreater(deleted, 0)
+        self.assertLess(after, before)
+
 
 # ---------------------------------------------------------------------------
 # TurnExtractor tests
@@ -659,6 +729,82 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(len(result["localization_control_commands"]), 2)
         self.assertEqual(result["localization_control_commands"][0]["action"], "STOP")
 
+    def test_ui_start_navigation_attempts_tile_prefetch_when_online(self):
+        class FakeMapManager:
+            def __init__(self):
+                self.prefetch_calls = 0
+
+            def prefetch_route_tiles(self, waypoints):
+                self.prefetch_calls += 1
+                return len(waypoints) >= 2
+
+            def cached_tile_count(self):
+                return 5
+
+        fake_map = FakeMapManager()
+        service = NavigationAPIService(
+            map_manager=fake_map,
+            offline_cache=OfflineCache(cache_dir=self.tmpdir),
+        )
+
+        payload = {
+            "session_id": "ride_prefetch_online",
+            "ts_ms": 1300,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        result = asyncio.run(service.ingest_ui_action(payload, self.route_data))
+
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["tile_prefetch"]["attempted"], True)
+        self.assertEqual(result["tile_prefetch"]["status"], "prefetched")
+        self.assertEqual(result["tile_prefetch"]["cached_tile_count"], 5)
+        self.assertEqual(fake_map.prefetch_calls, 1)
+
+    def test_ui_start_navigation_skips_tile_prefetch_when_offline(self):
+        class FakeMapManager:
+            def __init__(self):
+                self.prefetch_calls = 0
+
+            def prefetch_route_tiles(self, waypoints):
+                self.prefetch_calls += 1
+                return True
+
+            def cached_tile_count(self):
+                return 0
+
+        fake_map = FakeMapManager()
+        service = NavigationAPIService(
+            map_manager=fake_map,
+            offline_cache=OfflineCache(cache_dir=self.tmpdir),
+            offline_after_failures=1,
+            online_after_successes=1,
+        )
+
+        asyncio.run(
+            service.update_connectivity_status(
+                {
+                    "session_id": "ride_prefetch_offline",
+                    "ts_ms": 1200,
+                    "network_available": False,
+                    "internet_reachable": False,
+                }
+            )
+        )
+
+        payload = {
+            "session_id": "ride_prefetch_offline",
+            "ts_ms": 1300,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        result = asyncio.run(service.ingest_ui_action(payload, self.route_data))
+
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["tile_prefetch"]["attempted"], False)
+        self.assertEqual(result["tile_prefetch"]["status"], "skipped_offline")
+        self.assertEqual(fake_map.prefetch_calls, 0)
+
     def test_ui_stop_navigation_emits_stop_commands(self):
         payload = {
             "session_id": "ride_1",
@@ -671,6 +817,54 @@ class TestNavigationAPIService(unittest.TestCase):
         self.assertEqual(result["reason"], "navigation_stopped")
         self.assertEqual(len(result["localization_control_commands"]), 2)
         self.assertEqual(result["localization_control_commands"][0]["action"], "STOP")
+
+    def test_ui_stop_navigation_attempts_tile_eviction_when_enabled(self):
+        class FakeMapManager:
+            def __init__(self):
+                self.evict_calls = 0
+
+            def prefetch_route_tiles(self, waypoints, session_id=None):
+                return True
+
+            def cached_tile_count(self):
+                return 3
+
+            def enforce_cache_limits(self):
+                return 0
+
+            def evict_session_tiles(self, session_id):
+                self.evict_calls += 1
+                return 2
+
+        fake_map = FakeMapManager()
+        service = NavigationAPIService(
+            map_manager=fake_map,
+            offline_cache=OfflineCache(cache_dir=self.tmpdir),
+            evict_session_tiles_on_stop=True,
+        )
+
+        start_payload = {
+            "session_id": "ride_stop_evict",
+            "ts_ms": 1000,
+            "action_type": "START_NAVIGATION",
+            "payload": {"origin": "A", "destination": "B"},
+        }
+        asyncio.run(service.ingest_ui_action(start_payload, self.route_data))
+
+        stop_payload = {
+            "session_id": "ride_stop_evict",
+            "ts_ms": 1100,
+            "action_type": "STOP_NAVIGATION",
+            "payload": {},
+        }
+        result = asyncio.run(service.ingest_ui_action(stop_payload))
+
+        self.assertTrue(result["accepted"])
+        self.assertIn("tile_eviction", result)
+        self.assertEqual(result["tile_eviction"]["attempted"], True)
+        self.assertEqual(result["tile_eviction"]["status"], "evicted")
+        self.assertEqual(result["tile_eviction"]["deleted_tile_count"], 2)
+        self.assertEqual(fake_map.evict_calls, 1)
 
     def test_ui_start_navigation_offline_emits_start_commands(self):
         offline_service = NavigationAPIService(offline_after_failures=1, online_after_successes=1)

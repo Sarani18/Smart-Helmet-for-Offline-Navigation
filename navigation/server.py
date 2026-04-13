@@ -12,11 +12,17 @@ import os
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .api_service import NavigationAPIService
 from .event_validator import ContractValidationError
-from .vision_bridge import HTTPVisionNavHintSender, NavigationVisionBridge
+from .map_manager import MapManager
+from .vision_bridge import (
+    HTTPUIStateSender,
+    HTTPVisionNavHintSender,
+    NavigationVisionBridge,
+)
 
 
 class UIActionRequest(BaseModel):
@@ -28,21 +34,78 @@ class UIActionRequest(BaseModel):
 
 
 def _build_bridge() -> NavigationVisionBridge:
-    service = NavigationAPIService()
-
-    push_nav_hints = os.getenv("NCS_PUSH_NAV_HINTS", "1") == "1"
-    if not push_nav_hints:
-        return NavigationVisionBridge(service=service, nav_hint_sender=None)
-
-    nav_hint_url = os.getenv(
-        "VISION_NAV_HINT_URL",
-        "http://127.0.0.1:8001/api/localization/nav-hint",
+    map_manager = MapManager()
+    map_manager.configure_tile_download(
+        tile_url_template=os.getenv(
+            "NCS_TILE_URL_TEMPLATE",
+            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        ),
+        zoom_levels=_parse_zoom_levels(os.getenv("NCS_TILE_ZOOMS", "14,15")),
+        request_timeout_s=float(os.getenv("NCS_TILE_TIMEOUT_S", "5")),
+        user_agent=os.getenv(
+            "NCS_TILE_USER_AGENT",
+            "SmartHelmetNavigation/1.0 (educational project)",
+        ),
+        max_cache_size_mb=float(os.getenv("NCS_TILE_CACHE_MAX_MB", "200")),
     )
-    sender = HTTPVisionNavHintSender(nav_hint_url=nav_hint_url)
-    return NavigationVisionBridge(service=service, nav_hint_sender=sender)
+
+    service = NavigationAPIService(
+        map_manager=map_manager,
+        enable_tile_prefetch=os.getenv("NCS_ENABLE_TILE_PREFETCH", "1") == "1",
+        evict_session_tiles_on_stop=os.getenv("NCS_EVICT_SESSION_TILES_ON_STOP", "0") == "1",
+    )
+
+    nav_hint_sender = None
+    push_nav_hints = os.getenv("NCS_PUSH_NAV_HINTS", "1") == "1"
+    if push_nav_hints:
+        nav_hint_url = os.getenv(
+            "VISION_NAV_HINT_URL",
+            "http://127.0.0.1:8001/api/localization/nav-hint",
+        )
+        nav_hint_sender = HTTPVisionNavHintSender(nav_hint_url=nav_hint_url)
+
+    ui_state_sender = None
+    push_ui_state = os.getenv("NCS_PUSH_UI_STATE", "0") == "1"
+    if push_ui_state:
+        ui_state_url = os.getenv("UI_STATE_SINK_URL", "http://127.0.0.1:8765/receive")
+        ui_state_sender = HTTPUIStateSender(ui_state_url=ui_state_url)
+
+    return NavigationVisionBridge(
+        service=service,
+        nav_hint_sender=nav_hint_sender,
+        ui_state_sender=ui_state_sender,
+    )
+
+
+def _parse_allowed_origins(raw: str) -> list[str]:
+    values = [item.strip() for item in raw.split(",") if item.strip()]
+    if not values:
+        return ["*"]
+    return values
+
+
+def _parse_zoom_levels(raw: str) -> list[int]:
+    values = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            value = int(item)
+        except ValueError:
+            continue
+        if 0 <= value <= 20:
+            values.append(value)
+    return values or [14, 15]
 
 
 app = FastAPI(title="Navigation Control System API", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_parse_allowed_origins(os.getenv("NCS_CORS_ORIGINS", "*")),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 bridge = _build_bridge()
 
 

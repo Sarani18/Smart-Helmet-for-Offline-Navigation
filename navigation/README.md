@@ -193,6 +193,10 @@ Default endpoint mapping:
 Environment options for Navigation server:
 - `NCS_PUSH_NAV_HINTS=1` (default): enable nav-hint forwarding to Vision.
 - `VISION_NAV_HINT_URL=http://127.0.0.1:8001/api/localization/nav-hint`
+- `NCS_ENABLE_TILE_PREFETCH=1` (default): enable route-start tile prefetch.
+- `NCS_TILE_CACHE_MAX_MB=200` (default): max tile cache size before oldest-first eviction.
+- `NCS_TILE_ZOOMS=14,15` (default): comma-separated zoom levels for prefetch.
+- `NCS_EVICT_SESSION_TILES_ON_STOP=0` (default): if `1`, evict active session tiles on STOP.
 
 Run sequence:
 1. Start Navigation API server (port 8000):

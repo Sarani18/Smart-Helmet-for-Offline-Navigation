@@ -249,10 +249,13 @@ Send continuously at fixed update rate (recommended 2 to 5 Hz), and immediately 
 
 API call:
 
-- Caller: Navigation module (Sanskruti)
-- Callee: UI module (Priyal)
-- Endpoint: POST /api/ui/navigation-state.
-- Mode: Low-latency periodic updates.
+- Primary caller: UI module (Priyal)
+- Primary callee: Navigation module (Sanskruti)
+- Pull endpoint: POST /api/navigation/ui/state
+- Mode: low-latency polling (2 to 5 Hz) or on-demand after events/actions.
+- Optional push mode from Navigation to app sink can be enabled in server config:
+  - target example: POST /receive (embedded websocket bridge)
+  - fields remain exactly `UIStateMessage`.
 
 ### UIStateMessage class
 
@@ -362,6 +365,43 @@ RerouteRequestPayload:
 - Keep confidence in [0, 1].
 - Ignore duplicate event_id values.
 - Reject message if required fields are missing.
+
+## 5.1) Route start tile prefetch (implemented)
+
+Behavior on `START_NAVIGATION` / `REROUTE_REQUEST`:
+
+- Navigation stores route JSON in route cache as before.
+- When current network state is ONLINE, Navigation also prefetches OSM map tiles
+  for the route bounding box at configured zoom levels (default 14 and 15).
+- Prefetch is skipped in OFFLINE mode.
+
+Storage location:
+
+- Route JSON cache: `route_cache/route_<session_id>.json`
+- Tile cache: `map_data/tiles/<z>/<x>/<y>.png`
+
+Response field from UI action endpoint:
+
+- `tile_prefetch` object with:
+  - `attempted`: boolean
+  - `status`: `prefetched | prefetch_failed | skipped_offline | no_waypoints | disabled`
+  - `cached_tile_count`: integer (when attempted)
+  - `cache_trimmed_count`: integer (tiles evicted by cache-limit policy)
+
+Cache cleanup policy:
+
+- Tile cache uses max-size eviction (oldest-first).
+- Default max tile cache size: ~200 MB.
+- New prefetch can trigger automatic trimming of old tiles.
+
+Optional session-based cleanup on navigation stop:
+
+- If enabled in Navigation service config, STOP action can evict tiles
+  associated with the active session.
+- STOP response includes `tile_eviction` object with:
+  - `attempted`
+  - `status` (`evicted | disabled | no_session | not_supported | eviction_failed`)
+  - `deleted_tile_count` (when evicted)
 
 ## 6) Online/Offline detection and localization control
 

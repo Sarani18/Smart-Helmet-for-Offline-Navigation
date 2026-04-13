@@ -27,6 +27,7 @@ from .contracts import (
 from .confidence_tracker import NavigationConfidenceTracker
 from .event_pipeline import LocalizationEventPipeline
 from .event_validator import NavigationContractValidator
+from .map_manager import MapManager
 from .offline_cache import OfflineCache
 from .route_processor import RouteProcessor
 from .route_progress import ProgressUpdate, RouteProgressEngine
@@ -41,19 +42,25 @@ class NavigationAPIService:
         pipeline: Optional[LocalizationEventPipeline] = None,
         progress_engine: Optional[RouteProgressEngine] = None,
         route_processor: Optional[RouteProcessor] = None,
+        map_manager: Optional[MapManager] = None,
         offline_cache: Optional[OfflineCache] = None,
         confidence_tracker: Optional[NavigationConfidenceTracker] = None,
         offline_after_failures: int = 2,
         online_after_successes: int = 2,
         degraded_confidence_threshold: float = 0.45,
         degraded_no_event_ms: int = 15000,
+        enable_tile_prefetch: bool = True,
+        evict_session_tiles_on_stop: bool = False,
     ) -> None:
         self._validator = validator or NavigationContractValidator()
         self._pipeline = pipeline or LocalizationEventPipeline()
         self._progress = progress_engine or RouteProgressEngine()
         self._route_processor = route_processor or RouteProcessor()
+        self._map_manager = map_manager or MapManager()
         self._offline_cache = offline_cache or OfflineCache()
         self._confidence = confidence_tracker or NavigationConfidenceTracker()
+        self._enable_tile_prefetch = enable_tile_prefetch
+        self._evict_session_tiles_on_stop = evict_session_tiles_on_stop
 
         self._network_status = NetworkStatus.ONLINE
         self._consecutive_failures = 0
@@ -152,6 +159,8 @@ class NavigationAPIService:
         )
 
         if action.action_type == UIActionType.STOP_NAVIGATION:
+            active_session = self._active_session_id or action.session_id
+            tile_eviction = self._attempt_session_tile_eviction(active_session)
             self._progress.reset()
             self._confidence = NavigationConfidenceTracker()
             self._route_loaded_ts_ms = None
@@ -171,6 +180,7 @@ class NavigationAPIService:
                 "mode_changed": mode_changed,
                 "degraded": nav_mode == NavMode.DEGRADED,
                 "degraded_reason": mode_reason if nav_mode == NavMode.DEGRADED else None,
+                "tile_eviction": tile_eviction,
                 "nav_hint": None,
                 "ui_state": ui_state,
                 "localization_control_commands": action_commands,
@@ -209,6 +219,7 @@ class NavigationAPIService:
             self._last_nav_hint_signature = None
             self._active_session_id = action.session_id
             self._route_polyline = self._extract_route_polyline(route_data)
+            tile_prefetch = self._attempt_tile_prefetch(route_data, action.session_id)
 
             nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
             nav_hint = self._build_nav_hint(action.session_id, action.ts_ms)
@@ -227,6 +238,7 @@ class NavigationAPIService:
                 "mode_changed": mode_changed,
                 "degraded": nav_mode == NavMode.DEGRADED,
                 "degraded_reason": mode_reason if nav_mode == NavMode.DEGRADED else None,
+                "tile_prefetch": tile_prefetch,
                 "nav_hint": nav_hint,
                 "ui_state": ui_state,
                 "localization_control_commands": action_commands,
@@ -480,6 +492,107 @@ class NavigationAPIService:
     @staticmethod
     def _cache_key(session_id: str) -> str:
         return f"route_{session_id}"
+
+    def _attempt_tile_prefetch(self, route_data: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        if not self._enable_tile_prefetch:
+            return {
+                "attempted": False,
+                "status": "disabled",
+            }
+
+        if self._network_status != NetworkStatus.ONLINE:
+            return {
+                "attempted": False,
+                "status": "skipped_offline",
+            }
+
+        waypoints = self._extract_route_waypoints(route_data)
+        if len(waypoints) < 2:
+            return {
+                "attempted": False,
+                "status": "no_waypoints",
+            }
+
+        try:
+            try:
+                success = self._map_manager.prefetch_route_tiles(waypoints, session_id=session_id)
+            except TypeError:
+                # Compatibility for test doubles without session-aware signature.
+                success = self._map_manager.prefetch_route_tiles(waypoints)
+
+            cache_trimmed = 0
+            if hasattr(self._map_manager, "enforce_cache_limits"):
+                try:
+                    cache_trimmed = int(self._map_manager.enforce_cache_limits())
+                except Exception:
+                    cache_trimmed = 0
+
+            return {
+                "attempted": True,
+                "status": "prefetched" if success else "prefetch_failed",
+                "waypoint_count": len(waypoints),
+                "cached_tile_count": self._map_manager.cached_tile_count(),
+                "cache_trimmed_count": cache_trimmed,
+            }
+        except Exception as exc:  # pragma: no cover - defensive path
+            return {
+                "attempted": True,
+                "status": "prefetch_failed",
+                "error": str(exc),
+            }
+
+    def _attempt_session_tile_eviction(self, session_id: str) -> Dict[str, Any]:
+        if not self._evict_session_tiles_on_stop:
+            return {
+                "attempted": False,
+                "status": "disabled",
+            }
+
+        if not session_id:
+            return {
+                "attempted": False,
+                "status": "no_session",
+            }
+
+        if not hasattr(self._map_manager, "evict_session_tiles"):
+            return {
+                "attempted": False,
+                "status": "not_supported",
+            }
+
+        try:
+            deleted = int(self._map_manager.evict_session_tiles(session_id))
+            return {
+                "attempted": True,
+                "status": "evicted",
+                "session_id": session_id,
+                "deleted_tile_count": deleted,
+            }
+        except Exception as exc:  # pragma: no cover - defensive path
+            return {
+                "attempted": True,
+                "status": "eviction_failed",
+                "error": str(exc),
+            }
+
+    @staticmethod
+    def _extract_route_waypoints(route_data: Dict[str, Any]) -> List[Dict[str, float]]:
+        waypoints: List[Dict[str, float]] = []
+
+        def add_point(candidate: Dict[str, Any]) -> None:
+            if not isinstance(candidate, dict):
+                return
+            lat = candidate.get("lat")
+            lon = candidate.get("lon")
+            if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+                waypoints.append({"lat": float(lat), "lon": float(lon)})
+
+        add_point(route_data.get("origin") or {})
+        for step in route_data.get("steps", []):
+            add_point(step)
+        add_point(route_data.get("destination") or {})
+
+        return waypoints
 
     def _build_nav_hint(self, session_id: str, ts_ms: int) -> Optional[Dict[str, Any]]:
         expected_turn = self._progress.get_expected_next_turn()
