@@ -39,6 +39,7 @@ from .event_pipeline import LocalizationEventPipeline, EventIngestResult
 from .route_progress import RouteProgressEngine, ProgressUpdate
 from .api_service import NavigationAPIService
 from .confidence_tracker import NavigationConfidenceTracker, ConfidenceState
+from .vision_bridge import NavigationVisionBridge, HTTPVisionNavHintSender
 
 __all__ = [
 	"RouteProcessor",
@@ -75,4 +76,6 @@ __all__ = [
 	"NavigationAPIService",
 	"NavigationConfidenceTracker",
 	"ConfidenceState",
+	"NavigationVisionBridge",
+	"HTTPVisionNavHintSender",
 ]

@@ -173,3 +173,77 @@ Typical run sequence:
 
 - Python standard library only.
 - No third-party runtime dependency required for this package.
+
+## 10) Vision Integration (Merged Branch Setup)
+
+This repository now includes a transport adapter and bridge so Navigation and
+Vision can run together as planned.
+
+New files:
+- `navigation/server.py`: FastAPI server exposing Navigation endpoints.
+- `navigation/vision_bridge.py`: bridge that forwards nav hints from Navigation
+  to Vision module.
+
+Default endpoint mapping:
+- Vision -> Navigation event push:
+  - `POST /api/navigation/localization/visual-event`
+- Navigation -> Vision nav hint push:
+  - `POST http://127.0.0.1:8001/api/localization/nav-hint`
+
+Environment options for Navigation server:
+- `NCS_PUSH_NAV_HINTS=1` (default): enable nav-hint forwarding to Vision.
+- `VISION_NAV_HINT_URL=http://127.0.0.1:8001/api/localization/nav-hint`
+
+Run sequence:
+1. Start Navigation API server (port 8000):
+  - `uvicorn navigation.server:app --host 0.0.0.0 --port 8000`
+2. Start Vision module server (port 8001):
+  - `uvicorn localization.vision.main:app --host 0.0.0.0 --port 8001`
+3. Start navigation from UI endpoint with route data:
+  - `POST /api/navigation/ui/action` with action `START_NAVIGATION`
+4. Send camera frames to Vision:
+  - `POST /api/localization/frame`
+5. Observe:
+  - Vision emits visual events to Navigation.
+  - Navigation computes progress/confidence/mode.
+  - Navigation emits nav hints to Vision via bridge.
+
+## 11) Suggested End-to-End Test Scenarios
+
+1. Happy path turn match
+- Start navigation with route containing "Turn right".
+- Send Vision TURN RIGHT event.
+- Expect: step advances, destination/progress updates, confidence improves.
+
+2. Unexpected then expected detection
+- Vision sends one unexpected turn followed by expected turn.
+- Expect: mismatch lowers confidence slightly, then expected event recovers score.
+
+3. Offline transition and localization control
+- Send two offline connectivity updates (with hysteresis threshold = 2).
+- Expect: mode switches to OFFLINE, START commands issued to localization modules.
+
+4. Online recovery transition
+- After OFFLINE, send two healthy connectivity updates.
+- Expect: mode switches to ONLINE, STOP commands issued to localization modules.
+
+5. No recent events while offline (degraded)
+- Start route, go offline, then stop sending localization events beyond timeout.
+- Expect: nav mode becomes DEGRADED with reason `no_recent_localization_events`.
+
+6. Cache recovery route load
+- Start once with live route_data, then start again without route_data.
+- Expect: route is loaded from cache and processing continues.
+
+7. Nav-hint forwarding robustness
+- Simulate Vision nav-hint endpoint down.
+- Expect: Navigation flow still succeeds; response includes
+  `nav_hint_delivery.status = failed`.
+
+Automated coverage:
+- Existing orchestration tests: `navigation/tests/test_navigation.py`
+- Added bridge integration tests: `navigation/tests/test_navigation_vision_bridge.py`
+
+Runtime end-to-end check:
+- With both servers running, execute:
+  - `python navigation/tests/run_nav_vision_e2e.py`
