@@ -35,7 +35,7 @@ map_data/
 
 # Personal local preferences (NOT shared with team)
 CLAUDE.local.md
-
+MIGRATION_PLAN.md
 .claude
 # Personal settings overrides
 .claude/settings.json
