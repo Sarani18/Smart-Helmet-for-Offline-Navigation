@@ -1,0 +1,1277 @@
+<!-- <!-- <!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+    <title>SmartHelmet Nav</title>
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        :root {
+            --blue: #1A73E8;
+            --blue-l: #E8F0FE;
+            --blue-d: #1557B0;
+            --surface: #fff;
+            --bg: #F8F9FA;
+            --text: #202124;
+            --muted: #5F6368;
+            --border: #DADCE0;
+            --green: #34A853;
+            --red: #EA4335;
+            --amber: #FBBC04;
+            --purple: #7C3AED;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg)
+        }
+
+        /* WS status */
+        #wsBar {
+            padding: 5px 16px;
+            font-size: 11px;
+            font-family: monospace;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+            background: #FEF7E0;
+            color: #856600;
+            transition: all .3s
+        }
+
+        #wsBar.ok {
+            background: #E6F4EA;
+            color: #137333
+        }
+
+        #wsBar.err {
+            background: #FCE8E6;
+            color: #C5221F
+        }
+
+        .wsd {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .2
+            }
+        }
+
+        #wsBar.connecting .wsd {
+            animation: blink 1s infinite
+        }
+
+        /* DEGRADED full-width banner */
+        #degradedBanner {
+            display: none;
+            background: var(--red);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            text-align: center;
+            padding: 5px 16px;
+            letter-spacing: .3px;
+            font-family: monospace;
+            animation: blink 1s infinite
+        }
+
+        /* Topbar */
+        .topbar {
+            z-index: 10;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 9px 16px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            flex-wrap: wrap;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .07)
+        }
+
+        .logo {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--blue)
+        }
+
+        .logo span {
+            color: var(--text);
+            font-weight: 400
+        }
+
+        /* Mode pills */
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 600;
+            font-family: monospace;
+            transition: all .3s
+        }
+
+        .pd {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: currentColor
+        }
+
+        /* NavMode pills */
+        .nm-waiting {
+            background: #F1EFE8;
+            color: #888
+        }
+
+        .nm-online {
+            background: #E6F4EA;
+            color: #137333
+        }
+
+        .nm-offline {
+            background: #FEF7E0;
+            color: #856600
+        }
+
+        .nm-degraded {
+            background: #FCE8E6;
+            color: #C5221F;
+            outline: 2px solid var(--red);
+            outline-offset: 1px;
+            animation: blink 1.2s infinite
+        }
+
+        /* Position/GPS mode pills — 5 states */
+        .pm-waiting {
+            background: #F1EFE8;
+            color: #888
+        }
+
+        .pm-gps {
+            background: var(--blue-l);
+            color: var(--blue)
+        }
+
+        .pm-visual {
+            background: #EDE7F6;
+            color: #7C3AED
+        }
+
+        .pm-unknown {
+            background: #FCE8E6;
+            color: #C5221F
+        }
+
+        /* The 6 combined mode badges shown in topbar */
+        #modeBadge {
+            font-size: 10px;
+            font-weight: 600;
+            font-family: monospace;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid transparent;
+            transition: all .3s
+        }
+
+        .mb-online-gps {
+            background: #E6F4EA;
+            color: #137333;
+            border-color: #34A853
+        }
+
+        .mb-online-visual {
+            background: #EDE7F6;
+            color: #5B21B6;
+            border-color: #7C3AED
+        }
+
+        .mb-offline-gps {
+            background: #FEF7E0;
+            color: #856600;
+            border-color: #FBBC04
+        }
+
+        .mb-offline-visual {
+            background: #FFF3CD;
+            color: #6D4C00;
+            border-color: #FBBC04
+        }
+
+        .mb-degraded-visual {
+            background: #FCE8E6;
+            color: #C5221F;
+            border-color: var(--red);
+            animation: blink 1.2s infinite
+        }
+
+        .mb-degraded-unknown {
+            background: #FCE8E6;
+            color: #C5221F;
+            border-color: var(--red);
+            animation: blink .7s infinite
+        }
+
+        .mb-waiting {
+            background: #F1EFE8;
+            color: #888;
+            border-color: #ccc
+        }
+
+        #topCoords {
+            margin-left: auto;
+            font-family: monospace;
+            font-size: 10px;
+            color: var(--muted);
+            text-align: right;
+            line-height: 1.5
+        }
+
+        /* Map */
+        #map {
+            flex: 1;
+            position: relative
+        }
+
+        .maplibregl-ctrl-bottom-right,
+        .maplibregl-ctrl-bottom-left {
+            display: none
+        }
+
+        /* Full-screen overlays */
+        .overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 30;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 14px;
+            color: #fff;
+            text-align: center;
+            padding: 28px
+        }
+
+        .overlay.show {
+            display: flex
+        }
+
+        .overlay h2 {
+            font-size: 28px;
+            font-weight: 600
+        }
+
+        .overlay p {
+            font-size: 14px;
+            opacity: .88;
+            max-width: 280px
+        }
+
+        .overlay button {
+            margin-top: 4px;
+            padding: 10px 28px;
+            border-radius: 24px;
+            border: 2px solid #fff;
+            background: transparent;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer
+        }
+
+        #arrivedOverlay {
+            background: rgba(52, 168, 83, .93)
+        }
+
+        #crashOverlay {
+            background: rgba(234, 67, 53, .95)
+        }
+
+        /* Action panel */
+        #apOverlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .35);
+            z-index: 19
+        }
+
+        #apOverlay.show {
+            display: block
+        }
+
+        #actionPanel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+            background: var(--surface);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .22);
+            padding: 20px;
+            width: min(360px, calc(100vw - 32px));
+            display: none;
+            flex-direction: column;
+            gap: 12px
+        }
+
+        #actionPanel.show {
+            display: flex
+        }
+
+        #actionPanel h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text)
+        }
+
+        .ap-row {
+            display: flex;
+            gap: 8px
+        }
+
+        .ap-input {
+            flex: 1;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text);
+            background: var(--bg);
+            outline: none
+        }
+
+        .ap-input:focus {
+            border-color: var(--blue)
+        }
+
+        .ap-btn {
+            padding: 9px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all .15s
+        }
+
+        .ap-btn.confirm {
+            background: var(--blue);
+            color: #fff
+        }
+
+        .ap-btn.confirm:hover {
+            background: var(--blue-d)
+        }
+
+        .ap-btn.cancel {
+            background: var(--bg);
+            color: var(--muted);
+            border: 1px solid var(--border)
+        }
+
+        /* Toast */
+        #toast {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(32, 33, 36, .9);
+            color: #fff;
+            font-size: 12px;
+            padding: 7px 16px;
+            border-radius: 20px;
+            z-index: 25;
+            opacity: 0;
+            transition: opacity .25s;
+            pointer-events: none;
+            white-space: nowrap
+        }
+
+        #toast.show {
+            opacity: 1
+        }
+
+        /* Nav card */
+        .nav-card {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(500px, calc(100vw - 32px));
+            background: var(--surface);
+            border-radius: 18px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, .18);
+            padding: 14px 18px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .nav-top {
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .nav-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 11px;
+            background: var(--blue-l);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            color: var(--blue);
+            font-weight: 600;
+            transition: all .3s
+        }
+
+        .nav-instr {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.3
+        }
+
+        .nav-dist {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px
+        }
+
+        .nav-stats {
+            display: flex;
+            gap: 6px
+        }
+
+        .stat {
+            flex: 1;
+            background: var(--bg);
+            border-radius: 9px;
+            padding: 6px 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px
+        }
+
+        .stat-v {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            font-family: monospace
+        }
+
+        .stat-l {
+            font-size: 9px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .4px
+        }
+
+        .prog-bar {
+            height: 3px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden
+        }
+
+        .prog-fill {
+            height: 100%;
+            background: var(--blue);
+            border-radius: 2px;
+            transition: width .6s;
+            width: 0%
+        }
+
+        .off-banner {
+            background: #FCE8E6;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 12px;
+            color: #C5221F;
+            font-weight: 500;
+            display: none;
+            text-align: center
+        }
+
+        .action-row {
+            display: flex;
+            gap: 8px
+        }
+
+        .act-btn {
+            flex: 1;
+            padding: 8px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text);
+            cursor: pointer;
+            transition: all .15s
+        }
+
+        .act-btn:hover {
+            background: var(--blue-l);
+            border-color: var(--blue);
+            color: var(--blue)
+        }
+
+        .act-btn.primary {
+            background: var(--blue);
+            color: #fff;
+            border-color: var(--blue)
+        }
+
+        .act-btn.primary:hover {
+            background: var(--blue-d)
+        }
+
+        .act-btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+            pointer-events: none
+        }
+
+        /* Controls */
+        .controls {
+            position: absolute;
+            bottom: 195px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 10
+        }
+
+        .ctrl {
+            width: 40px;
+            height: 40px;
+            background: var(--surface);
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .15);
+            cursor: pointer;
+            font-size: 18px;
+            color: var(--text)
+        }
+
+        /* LED badge */
+        .led-badge {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: var(--surface);
+            border-radius: 9px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .15);
+            padding: 7px 11px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--muted);
+            z-index: 10
+        }
+
+        .led-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ccc;
+            transition: background .25s
+        }
+
+        @keyframes led-blink {
+
+            0%,
+            49% {
+                opacity: 1
+            }
+
+            50%,
+            100% {
+                opacity: .1
+            }
+        }
+
+        @keyframes led-rapid {
+
+            0%,
+            24% {
+                opacity: 1
+            }
+
+            25%,
+            74% {
+                opacity: .05
+            }
+
+            75%,
+            100% {
+                opacity: 1
+            }
+        }
+
+        .led-left {
+            background: var(--amber);
+            animation: led-blink .7s ease-in-out infinite
+        }
+
+        .led-right {
+            background: var(--amber);
+            animation: led-blink .7s ease-in-out infinite
+        }
+
+        .led-both {
+            background: var(--amber);
+            animation: led-blink .5s ease-in-out infinite
+        }
+
+        .led-red {
+            background: var(--red);
+            animation: led-blink 1.2s ease-in-out infinite
+        }
+
+        .led-rapid {
+            background: var(--red);
+            animation: led-rapid .3s ease-in-out infinite
+        }
+
+        .led-gn {
+            background: var(--green)
+        }
+
+        /* Debug / API log panel */
+        .debug {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            width: 256px;
+            max-height: 280px;
+            overflow-y: auto;
+            background: rgba(20, 20, 22, .93);
+            color: #BDC1C6;
+            font-family: monospace;
+            font-size: 10px;
+            line-height: 1.65;
+            border-radius: 9px;
+            padding: 9px 11px;
+            z-index: 10
+        }
+
+        .dh {
+            color: #8AB4F8;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 3px
+        }
+
+        .dl .k {
+            color: #8AB4F8
+        }
+
+        .dl .v {
+            color: #81C995
+        }
+
+        .dl .t {
+            color: #C58AF9
+        }
+
+        .dl .a {
+            color: #FDD663
+        }
+
+        .dl .cr {
+            color: #F28B82
+        }
+
+        .dl .api {
+            color: #A8C7FA
+        }
+
+        /* Blue dot */
+        .dot-wrap {
+            width: 20px;
+            height: 20px;
+            position: relative
+        }
+
+        .dot-ring {
+            position: absolute;
+            inset: -7px;
+            border-radius: 50%;
+            background: rgba(26, 115, 232, .18);
+            animation: ring-pulse 2s ease-out infinite
+        }
+
+        @keyframes ring-pulse {
+            0% {
+                transform: scale(1);
+                opacity: .7
+            }
+
+            100% {
+                transform: scale(2);
+                opacity: 0
+            }
+        }
+
+        .dot-inner {
+            width: 20px;
+            height: 20px;
+            background: var(--blue);
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(26, 115, 232, .5);
+            position: relative;
+            z-index: 1
+        }
+
+        .dot-arrow {
+            position: absolute;
+            top: -13px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-bottom: 11px solid var(--blue);
+            z-index: 2;
+            transition: transform .4s
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="wsBar" class="connecting">
+        <div class="wsd"></div><span id="wsTxt">Connecting to Python server…</span>
+    </div>
+
+    <!-- DEGRADED full-width alert strip -->
+    <div id="degradedBanner">
+        ⚠ DEGRADED — limited signal · position estimated by Vijit CV module
+    </div>
+
+    <div class="topbar">
+        <div class="logo">SmartHelmet <span>Nav</span></div>
+
+        <!-- NavMode pill: ONLINE / OFFLINE / DEGRADED -->
+        <div id="navModePill" class="pill nm-waiting">
+            <div class="pd"></div><span>—</span>
+        </div>
+
+        <!-- PositionMode pill: GPS / VISUAL / UNKNOWN -->
+        <div id="posModePill" class="pill pm-waiting">
+            <div class="pd"></div><span>—</span>
+        </div>
+
+        <!-- Combined mode badge — the 6 combinations from the spec -->
+        <div id="modeBadge" class="mb-waiting">—</div>
+
+        <div id="topCoords">lat — &nbsp;lng —</div>
+    </div>
+
+    <div id="map">
+
+        <!-- Arrived overlay -->
+        <div id="arrivedOverlay" class="overlay">
+            <h2>You have arrived</h2>
+            <p id="arrivedTxt"></p>
+            <button onclick="dismissArrived()">Dismiss</button>
+        </div>
+
+        <!-- Crash / SOS overlay — triggered when nav module sends crash message -->
+        <div id="crashOverlay" class="overlay">
+            <h2>⚠ Crash detected</h2>
+            <p>SOS has been sent to emergency contacts. Stay calm.</p>
+            <button onclick="dismissCrash()">Dismiss</button>
+        </div>
+
+        <!-- Action panel (Start / Reroute) -->
+        <div id="apOverlay" onclick="closePanel()"></div>
+        <div id="actionPanel">
+            <h3 id="apTitle">Start navigation</h3>
+            <div id="apStartRows">
+                <div class="ap-row" style="margin-bottom:8px">
+                    <input class="ap-input" id="apOrigin" placeholder="Origin" value="DLF Cyber City, Gurgaon" />
+                </div>
+                <div class="ap-row">
+                    <input class="ap-input" id="apDest" placeholder="Destination" value="IGI Airport T3, Delhi" />
+                </div>
+            </div>
+            <div id="apRerouteRow" class="ap-row" style="display:none">
+                <input class="ap-input" id="apReason" placeholder="Reroute reason" value="user_request" />
+            </div>
+            <div class="ap-row" style="margin-top:4px">
+                <button class="ap-btn confirm" onclick="confirmAction()">Send</button>
+                <button class="ap-btn cancel" onclick="closePanel()">Cancel</button>
+            </div>
+        </div>
+
+        <div id="toast"></div>
+
+        <!-- LED badge -->
+        <div class="led-badge">
+            <div class="led-dot" id="ledL"></div>
+            <div class="led-dot" id="ledR"></div>
+            <span id="ledLbl">STANDBY</span>
+        </div>
+
+        <!-- Map controls -->
+        <div class="controls">
+            <button class="ctrl" onclick="map.zoomIn()">+</button>
+            <button class="ctrl" onclick="map.zoomOut()">−</button>
+            <button class="ctrl" onclick="centerDot()">◎</button>
+        </div>
+
+        <!-- API / debug log -->
+        <div class="debug">
+            <div class="dh">API log</div>
+            <div id="dbgLog"></div>
+        </div>
+
+        <!-- Nav card -->
+        <div class="nav-card">
+            <div class="nav-top">
+                <div class="nav-icon" id="navIcon">↑</div>
+                <div>
+                    <div class="nav-instr" id="navInstr">Waiting for navigation…</div>
+                    <div class="nav-dist" id="navDist">—</div>
+                </div>
+            </div>
+
+            <div id="offBanner" class="off-banner">⚠ Off route — recalculating</div>
+
+            <div class="nav-stats">
+                <div class="stat">
+                    <div class="stat-v" id="sDist">—</div>
+                    <div class="stat-l">next turn</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-v" id="sConf">—</div>
+                    <div class="stat-l">confidence</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-v" id="sStep">—</div>
+                    <div class="stat-l">step</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-v" id="sPts">—</div>
+                    <div class="stat-l">route pts</div>
+                </div>
+            </div>
+
+            <div class="prog-bar">
+                <div class="prog-fill" id="progFill"></div>
+            </div>
+
+            <!-- Action buttons → UIActionMessage API calls → Sanskruti's nav module -->
+            <div class="action-row">
+                <button class="act-btn primary" id="btnStart" onclick="openStart()">Start</button>
+                <button class="act-btn" id="btnStop" onclick="doStop()" disabled>Stop</button>
+                <button class="act-btn" id="btnReroute" onclick="openReroute()" disabled>Reroute</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ── CONFIG ─────────────────────────────────────────────────────────────────────
+        const WS_URL = 'ws://localhost:8765/ws';
+        // On phone same WiFi: const WS_URL = 'ws://YOUR_PC_IP:8765/ws';
+
+        // ── MAP — centred on NH-48 corridor between GGN and IGI ────────────────────────
+        const DEFAULT = [77.0940, 28.5260];  // NH-48 midpoint [lng, lat]
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256, attribution: '© OpenStreetMap'
+                    }
+                },
+                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+            },
+            center: DEFAULT, zoom: 13, antialias: true,
+        });
+
+        // ── BLUE DOT ───────────────────────────────────────────────────────────────────
+        const dotEl = document.createElement('div');
+        dotEl.className = 'dot-wrap';
+        dotEl.innerHTML = '<div class="dot-ring"></div><div class="dot-arrow" id="dotArrow"></div><div class="dot-inner"></div>';
+        const dotMarker = new maplibregl.Marker({ element: dotEl, anchor: 'center' })
+            .setLngLat(DEFAULT).addTo(map);
+        let firstFix = true;
+
+        // ── ROUTE LINE ─────────────────────────────────────────────────────────────────
+        map.on('load', () => {
+            map.addSource('route', {
+                type: 'geojson',
+                data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+            });
+            map.addLayer({
+                id: 'route-casing', type: 'line', source: 'route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#FFFFFF', 'line-width': 9, 'line-opacity': .55 }
+            });
+            map.addLayer({
+                id: 'route-line', type: 'line', source: 'route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#1A73E8', 'line-width': 5, 'line-opacity': .9 }
+            });
+        });
+
+        // ── HANDLE UIStateMessage FROM SANSKRUTI (section 3 of integration spec) ───────
+        function handleUIState(s) {
+            const poly = s.route_polyline || [];
+
+            // 1. Move blue dot — last polyline point = current rider position on road
+            if (poly.length > 0) {
+                const [lat, lng] = poly[poly.length - 1];
+                dotMarker.setLngLat([lng, lat]);
+                if (poly.length >= 2) {
+                    const [plat, plng] = poly[poly.length - 2];
+                    document.getElementById('dotArrow').style.transform =
+                        `translateX(-50%) rotate(${bearing(plat, plng, lat, lng)}deg)`;
+                }
+                if (firstFix) { map.jumpTo({ center: [lng, lat], zoom: 15 }); firstFix = false; }
+                else { map.easeTo({ center: [lng, lat], duration: 700 }); }
+                document.getElementById('topCoords').innerHTML =
+                    `lat ${lat.toFixed(5)}<br>lng ${lng.toFixed(5)}`;
+            }
+
+            // 2. Route polyline — spec [[lat,lng]] → MapLibre needs [lng,lat]
+            if (poly.length && map.getSource('route')) {
+                map.getSource('route').setData({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: poly.map(p => [p[1], p[0]]) }
+                });
+                // Route line colour reflects nav_mode
+                if (map.getLayer('route-line')) {
+                    map.setPaintProperty('route-line', 'line-color',
+                        s.nav_mode === 'ONLINE' ? '#1A73E8' :
+                            s.nav_mode === 'OFFLINE' ? '#FBBC04' : '#EA4335');
+                }
+            }
+
+            // 3. Instruction text and directional icon
+            const lower = (s.next_instruction_text || '').toLowerCase();
+            const ICONS = {
+                left: '←', right: '→', 'u-turn': '↩', 'u_turn': '↩',
+                arrive: '■', destination: '■', straight: '↑', crash: '⚠', sos: '⚠'
+            };
+            let icon = '↑';
+            for (const [k, v] of Object.entries(ICONS)) { if (lower.includes(k)) { icon = v; break; } }
+            document.getElementById('navIcon').textContent = icon;
+            document.getElementById('navInstr').textContent = s.next_instruction_text || '—';
+            const dm = s.distance_to_next_m || 0;
+            document.getElementById('navDist').textContent =
+                dm > 0 ? (dm >= 1000 ? `in ${(dm / 1000).toFixed(1)} km` : `in ${Math.round(dm)} m`) : '';
+
+            // 4. Stat chips
+            document.getElementById('sDist').textContent = dm >= 1000 ? `${(dm / 1000).toFixed(1)}k` : Math.round(dm);
+            document.getElementById('sConf').textContent = Math.round((s.confidence || 0) * 100) + '%';
+            document.getElementById('sStep').textContent = s.active_step_index ?? '—';
+            document.getElementById('sPts').textContent = poly.length;
+            document.getElementById('progFill').style.width = Math.round((s.confidence || 0) * 100) + '%';
+
+            // 5. NavMode pill — ONLINE (green) / OFFLINE (amber) / DEGRADED (red+pulse)
+            const nm = document.getElementById('navModePill');
+            nm.querySelector('span').textContent = s.nav_mode || '—';
+            nm.className = 'pill ' + (
+                s.nav_mode === 'ONLINE' ? 'nm-online' :
+                    s.nav_mode === 'OFFLINE' ? 'nm-offline' :
+                        s.nav_mode === 'DEGRADED' ? 'nm-degraded' : 'nm-waiting');
+
+            // 6. PositionMode pill — GPS (blue) / VISUAL (purple) / UNKNOWN (red)
+            const pm = document.getElementById('posModePill');
+            pm.querySelector('span').textContent =
+                s.position_mode === 'GPS' ? 'GPS' :
+                    s.position_mode === 'VISUAL' ? 'VISUAL — CV' :
+                        s.position_mode === 'UNKNOWN' ? 'NO SIGNAL' : '—';
+            pm.className = 'pill ' + (
+                s.position_mode === 'GPS' ? 'pm-gps' :
+                    s.position_mode === 'VISUAL' ? 'pm-visual' :
+                        s.position_mode === 'UNKNOWN' ? 'pm-unknown' : 'pm-waiting');
+
+            // 7. Combined mode badge — the 6 valid combinations per integration spec
+            const mb = document.getElementById('modeBadge');
+            const combo = (s.nav_mode || '') + '+' + (s.position_mode || '');
+            const comboMap = {
+                'ONLINE+GPS': ['mb-online-gps', 'ONLINE · GPS'],
+                'ONLINE+VISUAL': ['mb-online-visual', 'ONLINE · VISUAL'],
+                'OFFLINE+GPS': ['mb-offline-gps', 'OFFLINE · GPS'],
+                'OFFLINE+VISUAL': ['mb-offline-visual', 'OFFLINE · VISUAL'],
+                'DEGRADED+VISUAL': ['mb-degraded-visual', 'DEGRADED · VISUAL'],
+                'DEGRADED+UNKNOWN': ['mb-degraded-unknown', 'DEGRADED · NO SIGNAL'],
+            };
+            const [cls, label] = comboMap[combo] || ['mb-waiting', '—'];
+            mb.className = cls;
+            mb.textContent = label;
+
+            // 8. DEGRADED full-width banner
+            document.getElementById('degradedBanner').style.display =
+                s.nav_mode === 'DEGRADED' ? 'block' : 'none';
+
+            // 9. Off-route banner
+            document.getElementById('offBanner').style.display =
+                s.off_route_flag ? 'block' : 'none';
+
+            // 10. Destination reached overlay
+            if (s.destination_reached_flag) {
+                document.getElementById('arrivedTxt').textContent =
+                    'Session: ' + (s.session_id || '');
+                document.getElementById('arrivedOverlay').classList.add('show');
+                setNavActive(false);
+            }
+
+            // 11. Crash / SOS overlay — triggered when nav module sends crash message
+            //     Per spec: crash arrives in next_instruction_text from nav/comms module
+            if (lower.includes('crash') || lower.includes('sos')) {
+                document.getElementById('crashOverlay').classList.add('show');
+                setNavActive(false);
+            }
+
+            // 12. LED badge
+            updateLED(lower, s.off_route_flag, s.position_mode);
+
+            // 13. Log to API panel
+            logReceived(s);
+        }
+
+        // ── LED BADGE ──────────────────────────────────────────────────────────────────
+        function updateLED(lower, offRoute, posMode) {
+            const lL = document.getElementById('ledL');
+            const lR = document.getElementById('ledR');
+            const lb = document.getElementById('ledLbl');
+            lL.className = 'led-dot'; lR.className = 'led-dot';
+            if (lower.includes('crash') || lower.includes('sos')) {
+                lL.className = 'led-dot led-rapid'; lR.className = 'led-dot led-rapid'; lb.textContent = 'CRASH/SOS';
+            } else if (offRoute) {
+                lL.className = 'led-dot led-red'; lR.className = 'led-dot led-red'; lb.textContent = 'OFF ROUTE';
+            } else if (posMode === 'UNKNOWN') {
+                lL.className = 'led-dot led-red'; lR.className = 'led-dot led-red'; lb.textContent = 'NO SIGNAL';
+            } else if (lower.includes('left')) {
+                lL.className = 'led-dot led-left'; lb.textContent = 'LEFT';
+            } else if (lower.includes('right')) {
+                lR.className = 'led-dot led-right'; lb.textContent = 'RIGHT';
+            } else if (lower.includes('u-turn') || lower.includes('u_turn')) {
+                lL.className = 'led-dot led-both'; lR.className = 'led-dot led-both'; lb.textContent = 'U-TURN';
+            } else if (lower.includes('arrive') || lower.includes('destination')) {
+                lL.className = 'led-dot led-both'; lR.className = 'led-dot led-both'; lb.textContent = 'ARRIVED';
+            } else {
+                lL.className = 'led-dot led-gn'; lb.textContent = 'STRAIGHT';
+            }
+        }
+
+        // ── BEARING ────────────────────────────────────────────────────────────────────
+        function bearing(lat1, lng1, lat2, lng2) {
+            const r = Math.PI / 180, dL = (lng2 - lng1) * r;
+            const y = Math.sin(dL) * Math.cos(lat2 * r);
+            const x = Math.cos(lat1 * r) * Math.sin(lat2 * r) - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos(dL);
+            return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+        }
+
+        // ── API LOG — shows all received UIStateMessages and sent UIActionMessages ─────
+        function logReceived(s) {
+            const el = document.getElementById('dbgLog');
+            const d = document.createElement('div'); d.className = 'dl';
+            const ts = s.ts_ms ? new Date(s.ts_ms).toISOString().substr(11, 12) : '--';
+            const crash = (s.next_instruction_text || '').toLowerCase().includes('crash');
+            d.innerHTML =
+                `<span class="t">${ts}</span> ` +
+                `<span class="api">← UIStateMessage</span><br>` +
+                `<span class="k">nav</span><span class="v">${s.nav_mode}</span> ` +
+                `<span class="k">pos</span><span class="v">${s.position_mode}</span>` +
+                (crash ? ` <span class="cr">CRASH</span>` : '') + `<br>` +
+                `<span class="k">conf</span><span class="v">${Math.round((s.confidence || 0) * 100)}%</span> ` +
+                `<span class="k">off</span><span class="v">${s.off_route_flag}</span> ` +
+                `<span class="v">${(s.next_instruction_text || '').substring(0, 28)}</span>`;
+            el.prepend(d);
+            while (el.children.length > 10) el.removeChild(el.lastChild);
+        }
+
+        function logSent(type, payload) {
+            const el = document.getElementById('dbgLog');
+            const d = document.createElement('div'); d.className = 'dl';
+            const ts = new Date().toISOString().substr(11, 12);
+            d.innerHTML =
+                `<span class="t">${ts}</span> <span class="a">→ UIActionMessage</span><br>` +
+                `<span class="k">type</span><span class="v">${type}</span><br>` +
+                `<span class="v">${JSON.stringify(payload).substring(0, 48)}</span>`;
+            el.prepend(d);
+            while (el.children.length > 10) el.removeChild(el.lastChild);
+        }
+
+        // ── TOAST ──────────────────────────────────────────────────────────────────────
+        let toastTimer;
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+        }
+
+        // ── BUTTON STATE ───────────────────────────────────────────────────────────────
+        let navActive = false;
+        function setNavActive(active) {
+            navActive = active;
+            document.getElementById('btnStart').disabled = active;
+            document.getElementById('btnStop').disabled = !active;
+            document.getElementById('btnReroute').disabled = !active;
+            document.getElementById('btnStart').classList.toggle('primary', !active);
+            document.getElementById('btnStop').classList.toggle('primary', active);
+        }
+
+        // ── ACTION PANEL ───────────────────────────────────────────────────────────────
+        let pendingAction = null;
+
+        function openStart() {
+            pendingAction = 'START_NAVIGATION';
+            document.getElementById('apTitle').textContent = 'Start navigation';
+            document.getElementById('apStartRows').style.display = 'block';
+            document.getElementById('apRerouteRow').style.display = 'none';
+            document.getElementById('apOverlay').classList.add('show');
+            document.getElementById('actionPanel').classList.add('show');
+            setTimeout(() => document.getElementById('apOrigin').focus(), 50);
+        }
+
+        function openReroute() {
+            pendingAction = 'REROUTE_REQUEST';
+            document.getElementById('apTitle').textContent = 'Request reroute';
+            document.getElementById('apStartRows').style.display = 'none';
+            document.getElementById('apRerouteRow').style.display = 'flex';
+            document.getElementById('apOverlay').classList.add('show');
+            document.getElementById('actionPanel').classList.add('show');
+            setTimeout(() => document.getElementById('apReason').focus(), 50);
+        }
+
+        function closePanel() {
+            document.getElementById('apOverlay').classList.remove('show');
+            document.getElementById('actionPanel').classList.remove('show');
+            pendingAction = null;
+        }
+
+        function confirmAction() {
+            if (!ws || ws.readyState !== 1) { showToast('Not connected'); return; }
+            let msg, payload;
+            if (pendingAction === 'START_NAVIGATION') {
+                const origin = document.getElementById('apOrigin').value.trim();
+                const dest = document.getElementById('apDest').value.trim();
+                if (!origin || !dest) { showToast('Fill in origin and destination'); return; }
+                payload = { origin, destination: dest };
+                msg = { action_type: 'START_NAVIGATION', payload };
+                setNavActive(true);
+                showToast('START_NAVIGATION sent to nav module');
+            } else if (pendingAction === 'REROUTE_REQUEST') {
+                const reason = document.getElementById('apReason').value.trim() || 'user_request';
+                payload = { reason };
+                msg = { action_type: 'REROUTE_REQUEST', payload };
+                showToast('REROUTE_REQUEST sent to nav module');
+            }
+            // UIActionMessage sent via WebSocket API to Sanskruti's registered callback
+            ws.send(JSON.stringify(msg));
+            logSent(pendingAction, payload);
+            closePanel();
+        }
+
+        // STOP — UIActionMessage STOP_NAVIGATION sent via WebSocket (section 4 of spec)
+        function doStop() {
+            if (!ws || ws.readyState !== 1) { showToast('Not connected'); return; }
+            ws.send(JSON.stringify({ action_type: 'STOP_NAVIGATION', payload: {} }));
+            showToast('STOP_NAVIGATION sent to nav module');
+            logSent('STOP_NAVIGATION', {});
+            setNavActive(false);
+        }
+
+        function dismissArrived() {
+            document.getElementById('arrivedOverlay').classList.remove('show');
+            setNavActive(false);
+        }
+        function dismissCrash() {
+            document.getElementById('crashOverlay').classList.remove('show');
+        }
+        function centerDot() {
+            if (!firstFix) { const ll = dotMarker.getLngLat(); map.flyTo({ center: [ll.lng, ll.lat], zoom: 15, duration: 800 }); }
+        }
+
+        // ── WEBSOCKET — connection to Python embedded server ───────────────────────────
+        let ws, retryTimer;
+        function connect() {
+            const bar = document.getElementById('wsBar'), txt = document.getElementById('wsTxt');
+            bar.className = 'connecting';
+            txt.textContent = `Connecting to ${WS_URL} …`;
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                clearTimeout(retryTimer);
+                bar.className = 'ok';
+                txt.textContent = 'Connected — receiving UIStateMessages from navigation module';
+            };
+
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    // Only handle ui_state messages (section 3 of spec)
+                    if (msg.type === 'ui_state') handleUIState(msg);
+                    // action_ack is optional confirmation from nav module
+                    if (msg.type === 'action_ack') showToast(`Nav module: ${msg.status || 'ok'}`);
+                } catch (_) { }
+            };
+
+            ws.onclose = () => {
+                bar.className = 'err';
+                txt.textContent = 'Disconnected — retrying… (python -m embedded.websocket_server)';
+                retryTimer = setTimeout(connect, 3000);
+            };
+        }
+
+        connect();
+    </script>
+</body>
+
+</html> -->
+ -->
