@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from .api_service import NavigationAPIService
 from .event_validator import ContractValidationError
 from .map_manager import MapManager
+from .osrm_client import fetch_route as osrm_fetch_route
 from .vision_bridge import (
     HTTPUIStateSender,
     HTTPVisionNavHintSender,
@@ -146,8 +147,22 @@ async def ingest_ui_action(request: UIActionRequest) -> Dict[str, Any]:
         "action_type": request.action_type,
         "payload": request.payload,
     }
+
+    route_data = request.route_data
+
+    # When no pre-built route_data is supplied and the action is a navigation
+    # start/reroute, attempt to build route_data by geocoding the origin and
+    # destination via Nominatim and fetching a driving route from OSRM.
+    if route_data is None and request.action_type in ("START_NAVIGATION", "REROUTE_REQUEST"):
+        origin      = request.payload.get("origin", "")
+        destination = request.payload.get("destination", "")
+        if origin and destination:
+            route_data = osrm_fetch_route(origin, destination)
+            # osrm_fetch_route returns None on network failure — NCS will
+            # fall back to offline cache automatically.
+
     try:
-        return await bridge.ingest_ui_action(payload, route_data=request.route_data)
+        return await bridge.ingest_ui_action(payload, route_data=route_data)
     except Exception as exc:  # pragma: no cover - transport guard
         _raise_as_http(exc)
         raise

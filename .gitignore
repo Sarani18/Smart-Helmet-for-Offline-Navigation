@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.pyc
 
+.gitignore
 # Virtual environments
 .venv/
 venv/
@@ -26,3 +27,38 @@ Thumbs.db
 # Route and map cache directories (generated at runtime)
 route_cache/
 map_data/
+
+
+# ========================================
+# Claude Code — add these lines to your .gitignore
+# ========================================
+
+# Personal local preferences (NOT shared with team)
+CLAUDE.local.md
+
+.claude
+# Personal settings overrides
+.claude/settings.json
+
+# Claude auto-generated memory (personal session learnings)
+.claude/memory/
+
+# Claude conversation history
+.claude/todos.json
+
+CLAUDE_CODE_PROMPTS.md
+CLAUDE.md
+INTEGRATION_CONSIDERATIONS.md
+smart-helmet-claude-code-setup.tar.gz
+
+# ========================================
+# Files you SHOULD commit (shared with team):
+# ========================================
+# CLAUDE.md                          ← project conventions (commit this!)
+# .claude/settings.json              ← shared permission rules
+# .claude/skills/                    ← shared skills
+# .claude/agents/                    ← shared subagents
+# .claude/commands/                  ← shared slash commands
+# .claude/rules/                     ← shared code rules
+# ========================================
+
