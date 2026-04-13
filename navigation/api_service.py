@@ -5,8 +5,7 @@ Async orchestration layer for API-style interactions between:
 - localization -> navigation
 - UI -> navigation
 
-This layer is transport-agnostic and can be connected to FastAPI, Flask,
-or any async web framework.
+This layer is transport-agnostic and can be connected to FastAPI, Flask, or any async web framework.
 """
 
 from __future__ import annotations
