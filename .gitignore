@@ -62,3 +62,14 @@ smart-helmet-claude-code-setup.tar.gz
 # .claude/rules/                     ← shared code rules
 # ========================================
 
+
+# SSL certificates (generated locally for testing)
+*.pem
+
+# Model checkpoints and training data
+*.pth
+*.pt
+localization/CV/data/
+localization/CV/models/
+localization/CV/autonue_tools/
+tensorboard_logs/

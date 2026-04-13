@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>DR Sensor Stream</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1f35 0%, #0d1225 100%);
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #818cf8, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header .subtitle {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: rgba(15, 23, 42, 0.8);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+            transition: all 0.3s;
+        }
+
+        .status-dot.active {
+            background: #22c55e;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .batch-counter {
+            font-size: 12px;
+            color: #94a3b8;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .main { padding: 16px; }
+
+        /* Permission & Connect Section */
+        .connect-section {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.05));
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .server-input {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .server-input input {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 10px;
+            padding: 10px 14px;
+            color: #e2e8f0;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:active { transform: scale(0.97); }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 12px;
+        }
+
+        /* Sensor Cards */
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .sensor-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 14px;
+        }
+
+        .sensor-card .label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+
+        .sensor-card .values {
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.6;
+        }
+
+        .sensor-card .values .axis {
+            color: #94a3b8;
+        }
+
+        .sensor-card .values .val {
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+
+        .val.positive { color: #4ade80; }
+        .val.negative { color: #f87171; }
+
+        /* Position Card */
+        .position-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.05));
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .position-card h3 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #818cf8;
+            margin-bottom: 10px;
+        }
+
+        .pos-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .pos-item {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .pos-item .pos-label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .pos-item .pos-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-top: 2px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Log */
+        .log-section {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 14px;
+            padding: 14px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .log-section h3 {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .log-entry {
+            font-size: 11px;
+            color: #94a3b8;
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .log-entry.error { color: #f87171; }
+        .log-entry.success { color: #4ade80; }
+
+        /* Compass */
+        .compass-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .compass {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
+            border: 2px solid rgba(99, 102, 241, 0.3);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .compass-needle {
+            width: 4px;
+            height: 50px;
+            background: linear-gradient(to top, #ef4444 50%, #e2e8f0 50%);
+            border-radius: 2px;
+            transform-origin: bottom center;
+            position: absolute;
+            bottom: 50%;
+            transition: transform 0.3s ease;
+        }
+
+        .compass-label {
+            position: absolute;
+            font-size: 10px;
+            font-weight: 600;
+            color: #64748b;
+        }
+
+        .compass-label.n { top: 6px; }
+        .compass-label.s { bottom: 6px; }
+        .compass-label.e { right: 8px; }
+        .compass-label.w { left: 8px; }
+
+        .compass-heading {
+            text-align: center;
+            font-size: 22px;
+            font-weight: 700;
+            color: #818cf8;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>⛑️ DR Sensor Stream</h1>
+    <div class="subtitle">Smart Helmet — Dead Reckoning</div>
+</div>
+
+<div class="status-bar">
+    <div class="status-indicator">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Disconnected</span>
+    </div>
+    <div class="batch-counter" id="batchCounter">Batches: 0</div>
+</div>
+
+<div class="main">
+    <!-- Connect -->
+    <div class="connect-section">
+        <div class="server-input">
+            <input type="text" id="serverUrl" placeholder="Server IP:Port" value="">
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-primary" id="btnPermission" onclick="requestPermission()">
+                📱 Enable Sensors
+            </button>
+            <button class="btn btn-success" id="btnStart" onclick="startStreaming()" disabled>
+                ▶ Start
+            </button>
+            <button class="btn btn-danger" id="btnStop" onclick="stopStreaming()" disabled>
+                ⏹ Stop
+            </button>
+        </div>
+    </div>
+
+    <!-- Compass -->
+    <div class="compass-container">
+        <div>
+            <div class="compass">
+                <div class="compass-needle" id="needle"></div>
+                <div class="compass-label n">N</div>
+                <div class="compass-label s">S</div>
+                <div class="compass-label e">E</div>
+                <div class="compass-label w">W</div>
+            </div>
+            <div class="compass-heading" id="headingDisplay">0°</div>
+        </div>
+    </div>
+
+    <!-- Sensor Values -->
+    <div class="sensor-grid">
+        <div class="sensor-card">
+            <div class="label">🔄 Accelerometer</div>
+            <div class="values" id="accelValues">
+                <span class="axis">X:</span> <span class="val">—</span><br>
+                <span class="axis">Y:</span> <span class="val">—</span><br>
+                <span class="axis">Z:</span> <span class="val">—</span>
+            </div>
+        </div>
+        <div class="sensor-card">
+            <div class="label">🌀 Gyroscope</div>
+            <div class="values" id="gyroValues">
+                <span class="axis">X:</span> <span class="val">—</span><br>
+                <span class="axis">Y:</span> <span class="val">—</span><br>
+                <span class="axis">Z:</span> <span class="val">—</span>
+            </div>
+        </div>
+        <div class="sensor-card">
+            <div class="label">📍 GPS</div>
+            <div class="values" id="gpsValues">
+                <span class="axis">Lat:</span> <span class="val">—</span><br>
+                <span class="axis">Lon:</span> <span class="val">—</span><br>
+                <span class="axis">Spd:</span> <span class="val">—</span>
+            </div>
+        </div>
+        <div class="sensor-card">
+            <div class="label">🧭 Orientation</div>
+            <div class="values" id="orientValues">
+                <span class="axis">α:</span> <span class="val">—</span><br>
+                <span class="axis">β:</span> <span class="val">—</span><br>
+                <span class="axis">γ:</span> <span class="val">—</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- DR Position -->
+    <div class="position-card">
+        <h3>📌 Dead Reckoning Position</h3>
+        <div class="pos-grid">
+            <div class="pos-item">
+                <div class="pos-label">Latitude</div>
+                <div class="pos-value" id="drLat">—</div>
+            </div>
+            <div class="pos-item">
+                <div class="pos-label">Longitude</div>
+                <div class="pos-value" id="drLon">—</div>
+            </div>
+            <div class="pos-item">
+                <div class="pos-label">Heading</div>
+                <div class="pos-value" id="drHeading">—</div>
+            </div>
+            <div class="pos-item">
+                <div class="pos-label">Uncertainty</div>
+                <div class="pos-value" id="drUncertainty">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log -->
+    <div class="log-section">
+        <h3>Activity Log</h3>
+        <div id="logContainer"></div>
+    </div>
+</div>
+
+<script>
+    // ============================
+    // State
+    // ============================
+    let streaming = false;
+    let sensorsEnabled = false;
+    let batchCount = 0;
+    let readingBuffer = [];
+    let batchInterval = null;
+    let gpsWatchId = null;
+    let sessionId = 'ride_' + Date.now();
+
+    // Sensor latest values (for UI display)
+    let latestAccel = { x: 0, y: 0, z: 0 };
+    let latestGyro = { x: 0, y: 0, z: 0 };
+    let latestOrientation = { alpha: 0, beta: 0, gamma: 0 };
+    let latestGPS = { lat: null, lon: null, speed: null, bearing: null };
+
+    // Timing — use performance.now() as proxy for Android timestamp_ns
+    const bootTimeOffset = performance.timeOrigin * 1e6; // ms → ns
+
+    // Auto-detect server URL
+    const currentHost = window.location.hostname || 'localhost';
+    const currentPort = window.location.port || '8002';
+    document.getElementById('serverUrl').value = `${currentHost}:${currentPort}`;
+
+    // ============================
+    // Logging
+    // ============================
+    function log(msg, type = '') {
+        const container = document.getElementById('logContainer');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry ' + type;
+        const time = new Date().toLocaleTimeString('en-GB');
+        entry.textContent = `[${time}] ${msg}`;
+        container.insertBefore(entry, container.firstChild);
+        if (container.children.length > 50) container.removeChild(container.lastChild);
+    }
+
+    // ============================
+    // Sensor Permission
+    // ============================
+    async function requestPermission() {
+        try {
+            // iOS 13+ requires explicit permission
+            if (typeof DeviceMotionEvent !== 'undefined' &&
+                typeof DeviceMotionEvent.requestPermission === 'function') {
+                const permission = await DeviceMotionEvent.requestPermission();
+                if (permission !== 'granted') {
+                    log('Motion permission denied', 'error');
+                    return;
+                }
+            }
+
+            if (typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission !== 'granted') {
+                    log('Orientation permission denied', 'error');
+                    return;
+                }
+            }
+
+            // Register sensor listeners
+            window.addEventListener('devicemotion', onDeviceMotion);
+            window.addEventListener('deviceorientation', onDeviceOrientation);
+
+            sensorsEnabled = true;
+            document.getElementById('btnPermission').disabled = true;
+            document.getElementById('btnPermission').textContent = '✅ Sensors Active';
+            document.getElementById('btnStart').disabled = false;
+            log('Sensors enabled successfully', 'success');
+
+        } catch (err) {
+            log('Sensor error: ' + err.message, 'error');
+        }
+    }
+
+    // ============================
+    // DeviceMotion Handler
+    // ============================
+    function onDeviceMotion(event) {
+        const now_ns = Math.floor((performance.timeOrigin + performance.now()) * 1e6);
+
+        // Accelerometer (with gravity)
+        const ag = event.accelerationIncludingGravity;
+        if (ag && ag.x !== null) {
+            latestAccel = { x: ag.x, y: ag.y, z: ag.z };
+            if (streaming) {
+                readingBuffer.push({
+                    sensor_type: 'ACCELEROMETER',
+                    values: [ag.x || 0, ag.y || 0, ag.z || 0],
+                    timestamp_ns: now_ns,
+                    accuracy: 3
+                });
+            }
+        }
+
+        // Linear acceleration (without gravity)
+        const la = event.acceleration;
+        if (la && la.x !== null) {
+            if (streaming) {
+                readingBuffer.push({
+                    sensor_type: 'LINEAR_ACCELERATION',
+                    values: [la.x || 0, la.y || 0, la.z || 0],
+                    timestamp_ns: now_ns,
+                    accuracy: 3
+                });
+            }
+        }
+
+        // Gyroscope — browser gives deg/s, our engine expects rad/s
+        const rr = event.rotationRate;
+        if (rr && rr.alpha !== null) {
+            // Browser axes: alpha=z, beta=x, gamma=y
+            const gx = (rr.beta || 0) * Math.PI / 180;   // deg/s → rad/s
+            const gy = (rr.gamma || 0) * Math.PI / 180;
+            const gz = (rr.alpha || 0) * Math.PI / 180;
+            latestGyro = { x: gx, y: gy, z: gz };
+
+            if (streaming) {
+                readingBuffer.push({
+                    sensor_type: 'GYROSCOPE',
+                    values: [gx, gy, gz],
+                    timestamp_ns: now_ns,
+                    accuracy: 3
+                });
+            }
+        }
+
+        updateSensorUI();
+    }
+
+    // ============================
+    // DeviceOrientation Handler
+    // ============================
+    function onDeviceOrientation(event) {
+        if (event.alpha !== null) {
+            latestOrientation = {
+                alpha: event.alpha || 0,   // compass heading (0-360)
+                beta: event.beta || 0,     // front-back tilt
+                gamma: event.gamma || 0    // left-right tilt
+            };
+
+            // Update compass
+            const heading = event.alpha;
+            document.getElementById('needle').style.transform =
+                `rotate(${heading}deg)`;
+            document.getElementById('headingDisplay').textContent =
+                `${Math.round(heading)}°`;
+
+            updateOrientationUI();
+        }
+    }
+
+    // ============================
+    // GPS (Geolocation API)
+    // ============================
+    function startGPS() {
+        if ('geolocation' in navigator) {
+            gpsWatchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    latestGPS = {
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude,
+                        speed: pos.coords.speed,
+                        bearing: pos.coords.heading
+                    };
+                    updateGPSUI();
+
+                    // Send GPS anchor to server
+                    if (streaming) {
+                        sendGPSAnchor(pos.coords);
+
+                        // Also send GPS speed as sensor reading
+                        if (pos.coords.speed !== null) {
+                            readingBuffer.push({
+                                sensor_type: 'GPS_SPEED',
+                                values: [pos.coords.speed || 0],
+                                timestamp_ns: Math.floor((performance.timeOrigin + performance.now()) * 1e6),
+                                accuracy: 3
+                            });
+                        }
+                    }
+                },
+                (err) => log('GPS: ' + err.message, 'error'),
+                { enableHighAccuracy: true, maximumAge: 1000 }
+            );
+            log('GPS tracking started', 'success');
+        } else {
+            log('Geolocation not available', 'error');
+        }
+    }
+
+    async function sendGPSAnchor(coords) {
+        const url = getServerBase() + '/api/localization/dr/gps-anchor';
+        try {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    ts_ms: Date.now(),
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                    accuracy_m: coords.accuracy || 10,
+                    speed_mps: coords.speed || 0,
+                    bearing_deg: coords.heading || 0
+                })
+            });
+        } catch (e) {
+            // Silently fail — anchor is best-effort
+        }
+    }
+
+    // ============================
+    // Streaming Control
+    // ============================
+    function getServerBase() {
+        const val = document.getElementById('serverUrl').value.trim();
+        const protocol = window.location.protocol; // 'https:' or 'http:'
+        return protocol + '//' + val;
+    }
+
+    async function startStreaming() {
+        const base = getServerBase();
+
+        // First, start the DR engine
+        try {
+            const resp = await fetch(base + '/api/localization/dr/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    ts_ms: Date.now(),
+                    action: 'START',
+                    reason: 'phone_stream'
+                })
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            log('DR engine started on server', 'success');
+        } catch (e) {
+            log('Cannot reach server: ' + e.message, 'error');
+            return;
+        }
+
+        streaming = true;
+        readingBuffer = [];
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('statusDot').classList.add('active');
+        document.getElementById('statusText').textContent = 'Streaming';
+
+        // Start GPS
+        startGPS();
+
+        // Send batches every 200ms (5 Hz)
+        batchInterval = setInterval(sendBatch, 200);
+        log('Streaming started @ 5 Hz', 'success');
+    }
+
+    function stopStreaming() {
+        streaming = false;
+        if (batchInterval) clearInterval(batchInterval);
+        if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+        document.getElementById('statusDot').classList.remove('active');
+        document.getElementById('statusText').textContent = 'Stopped';
+
+        // Stop engine on server
+        fetch(getServerBase() + '/api/localization/dr/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: sessionId,
+                ts_ms: Date.now(),
+                action: 'STOP',
+                reason: 'user_stopped'
+            })
+        }).catch(() => {});
+
+        log('Streaming stopped');
+    }
+
+    async function sendBatch() {
+        if (readingBuffer.length === 0) return;
+
+        const batch = {
+            session_id: sessionId,
+            ts_ms: Date.now(),
+            readings: readingBuffer.splice(0) // take and clear
+        };
+
+        try {
+            const resp = await fetch(
+                getServerBase() + '/api/localization/dr/sensor-data',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(batch)
+                }
+            );
+
+            if (resp.ok) {
+                batchCount++;
+                document.getElementById('batchCounter').textContent =
+                    `Batches: ${batchCount} | ${batch.readings.length} readings`;
+
+                // Fetch DR status to update position display
+                fetchDRStatus();
+            }
+        } catch (e) {
+            log('Send failed: ' + e.message, 'error');
+        }
+    }
+
+    async function fetchDRStatus() {
+        try {
+            const resp = await fetch(getServerBase() + '/api/localization/dr/status');
+            const data = await resp.json();
+
+            document.getElementById('drLat').textContent =
+                data.latitude ? data.latitude.toFixed(6) : '—';
+            document.getElementById('drLon').textContent =
+                data.longitude ? data.longitude.toFixed(6) : '—';
+            document.getElementById('drHeading').textContent =
+                data.heading_deg ? data.heading_deg.toFixed(1) + '°' : '—';
+            document.getElementById('drUncertainty').textContent =
+                data.uncertainty_m ? data.uncertainty_m.toFixed(1) + 'm' : '—';
+        } catch (e) {
+            // Silently fail
+        }
+    }
+
+    // ============================
+    // UI Updates
+    // ============================
+    function fmtVal(v) {
+        const s = v.toFixed(3);
+        const cls = v >= 0 ? 'positive' : 'negative';
+        return `<span class="val ${cls}">${s}</span>`;
+    }
+
+    function updateSensorUI() {
+        document.getElementById('accelValues').innerHTML =
+            `<span class="axis">X:</span> ${fmtVal(latestAccel.x)}<br>` +
+            `<span class="axis">Y:</span> ${fmtVal(latestAccel.y)}<br>` +
+            `<span class="axis">Z:</span> ${fmtVal(latestAccel.z)}`;
+
+        document.getElementById('gyroValues').innerHTML =
+            `<span class="axis">X:</span> ${fmtVal(latestGyro.x)}<br>` +
+            `<span class="axis">Y:</span> ${fmtVal(latestGyro.y)}<br>` +
+            `<span class="axis">Z:</span> ${fmtVal(latestGyro.z)}`;
+    }
+
+    function updateOrientationUI() {
+        document.getElementById('orientValues').innerHTML =
+            `<span class="axis">α:</span> ${fmtVal(latestOrientation.alpha)}<br>` +
+            `<span class="axis">β:</span> ${fmtVal(latestOrientation.beta)}<br>` +
+            `<span class="axis">γ:</span> ${fmtVal(latestOrientation.gamma)}`;
+    }
+
+    function updateGPSUI() {
+        document.getElementById('gpsValues').innerHTML =
+            `<span class="axis">Lat:</span> <span class="val">${latestGPS.lat ? latestGPS.lat.toFixed(6) : '—'}</span><br>` +
+            `<span class="axis">Lon:</span> <span class="val">${latestGPS.lon ? latestGPS.lon.toFixed(6) : '—'}</span><br>` +
+            `<span class="axis">Spd:</span> <span class="val">${latestGPS.speed !== null ? latestGPS.speed.toFixed(1) + ' m/s' : '—'}</span>`;
+    }
+</script>
+
+</body>
+</html>
