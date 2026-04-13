@@ -26,3 +26,14 @@ Thumbs.db
 # Route and map cache directories (generated at runtime)
 route_cache/
 map_data/
+
+# SSL certificates (generated locally for testing)
+*.pem
+
+# Model checkpoints and training data
+*.pth
+*.pt
+localization/CV/data/
+localization/CV/models/
+localization/CV/autonue_tools/
+tensorboard_logs/
