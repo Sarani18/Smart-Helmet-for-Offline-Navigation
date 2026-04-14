@@ -59,6 +59,20 @@ Export the main segmentation model for Android integration:
 python3 export_onnx.py --checkpoint models/best.pth --output models/helmet_model.onnx
 ```
 
+### 6. Android App Integration
+To utilize the CV module on the Android app, follow these steps:
+1. **Export the models**: Run the `export_onnx.py` step above.
+2. **Copy the Asset**: Place the generated `helmet_model.onnx` inside the Android application's `app/src/main/assets/` directory.
+3. **Include ONNX Runtime**: Add the dependency in your application's `build.gradle`:
+   ```gradle
+   dependencies {
+       implementation 'com.microsoft.onnxruntime:onnxruntime-android:latest.release'
+   }
+   ```
+4. **Implement Inference**: Initialize `OrtEnvironment.getEnvironment()` using the `.onnx` asset. Read camera frames, scale them to `320x320`, and stream them to the session as Float arrays of shape `[1, 3, 320, 320]`.
+
+*Caveat for Android Developers:* The ONNX model executes the raw semantic segmentation. The English navigation logic (e.g. converting a mask to "Turn Left") is implemented in `scene_analyzer.py`. You will need to implement a lightweight version of this translation layer in Kotlin/Java to process the mask outputs into actionable App commands.
+
 ---
 
 ## 📂 Key Files
