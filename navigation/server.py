@@ -186,6 +186,19 @@ async def get_ui_state(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise
 
 
+@app.post("/api/navigation/module/status")
+async def module_status(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Informational health report from the mobile app (BLE, Vision, etc.).
+    NCS logs the event; no routing logic is changed."""
+    import logging as _logging
+    _logging.getLogger(__name__).info(
+        "module_status: session=%s module=%s status=%s reason=%s",
+        payload.get("session_id"), payload.get("module"),
+        payload.get("status"), payload.get("reason"),
+    )
+    return {"accepted": True}
+
+
 if __name__ == "__main__":
     import uvicorn
 

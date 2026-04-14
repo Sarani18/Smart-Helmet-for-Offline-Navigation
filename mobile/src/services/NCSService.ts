@@ -106,6 +106,68 @@ export async function getUIState(sessionId: string): Promise<UIStateResponse> {
   });
 }
 
+// ── Module status (BLE / Vision health reports) ─────────────────────────────
+
+/**
+ * Best-effort report to NCS that a hardware module is compromised or recovered.
+ * NCS logs it; no routing changes are triggered.
+ * Always resolves (never throws) — fire-and-forget.
+ */
+export async function sendModuleStatus(
+  sessionId: string,
+  module: string,
+  status: 'compromised' | 'recovered',
+  reason?: string,
+): Promise<void> {
+  try {
+    await post('/api/navigation/module/status', {
+      session_id: sessionId,
+      ts_ms:      Date.now(),
+      module,
+      status,
+      reason:     reason ?? '',
+    });
+  } catch {
+    // Intentionally swallowed — informational only
+  }
+}
+
+// ── Dead-reckoning events ───────────────────────────────────────────────────
+
+export interface DREventResponse {
+  accepted: boolean;
+  reason?: string;
+}
+
+/** Post a dead-reckoning position estimate to NCS.
+ *  NCS processes this for route progress when GPS is unavailable.
+ *  Per INTEGRATION_CONSIDERATIONS.md §1 (DR direction, future endpoint). */
+export async function postDeadReckoningEvent(
+  sessionId: string,
+  eventId: string,
+  latitude: number,
+  longitude: number,
+  uncertaintyMeters: number,
+  headingDegrees: number,
+  speedMps: number,
+  confidence: number,
+): Promise<DREventResponse> {
+  return post('/api/navigation/localization/dead-reckoning-event', {
+    session_id:  sessionId,
+    event_id:    eventId,
+    ts_ms:       Date.now(),
+    event_type:  'DEAD_RECKONING',
+    confidence,
+    payload: {
+      latitude,
+      longitude,
+      uncertainty_meters: uncertaintyMeters,
+      heading_degrees:    headingDegrees,
+      speed_mps:          speedMps,
+    },
+  });
+}
+
 // ── Connectivity status ─────────────────────────────────────────────────────
 
 export async function sendConnectivityStatus(
