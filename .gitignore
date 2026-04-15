@@ -37,3 +37,13 @@ localization/CV/data/
 localization/CV/models/
 localization/CV/autonue_tools/
 tensorboard_logs/
+
+# CV processed results and training scripts
+localization/CV/scene_outputs/
+localization/CV/road_masks/
+localization/CV/train.py
+localization/CV/train_scene_classifier.py
+localization/CV/auto_label_scenes.py
+localization/CV/setup_dataset.py
+localization/CV/generate_labels.py
+localization/CV/scene_labels.csv

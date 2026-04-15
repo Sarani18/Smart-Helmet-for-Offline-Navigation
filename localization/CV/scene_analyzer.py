@@ -35,7 +35,7 @@ import torch.nn as nn
 from torchvision.models.segmentation import lraspp_mobilenet_v3_large
 
 try:
-    from train_scene_classifier import TinySceneCNN, SCENE_CLASSES
+    from models import TinySceneCNN, SCENE_CLASSES
 except ImportError:
     TinySceneCNN, SCENE_CLASSES = None, None
 
