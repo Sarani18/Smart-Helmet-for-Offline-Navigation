@@ -1,13 +1,22 @@
 /**
- * OSM tile downloader for offline map rendering.
- * Downloads tiles for a route bounding box at zoom levels 14 and 15,
- * saves them to DocumentDirectoryPath/offline_tiles/{z}/{x}/{y}.png.
- * Max cache size ~200MB — evicts oldest tiles when exceeded.
+ * OSM tile cache for react-native-maps UrlTile.
+ *
+ * Key design: react-native-maps MapTileProvider.java (the native Android code behind UrlTile)
+ * saves tiles as {tileCachePath}/{zoom}/{x}/{y}  — NO file extension.
+ * It also reads from that same path before fetching the network.
+ *
+ * So we point UrlTile.tileCachePath at TILE_CACHE_DIR and the native layer handles
+ * both online fetching AND offline serving — no RNFS download needed for basic use.
+ *
+ * downloadTilesForRoute / downloadTilesAroundPoint use the same path convention so that
+ * pre-fetched tiles are found by the native cache read.
  */
 import RNFS from 'react-native-fs';
 import type {LatLon} from './routeService';
 
-const TILE_DIR = `${RNFS.DocumentDirectoryPath}/offline_tiles`;
+/** Plain filesystem path — no file:// prefix. Used both here and by UrlTile.tileCachePath. */
+export const TILE_CACHE_DIR = `${RNFS.DocumentDirectoryPath}/osm_tile_cache`;
+
 const OSM_TILE_URL = 'https://tile.openstreetmap.org';
 const MAX_CACHE_BYTES = 200 * 1024 * 1024; // 200 MB
 const DEFAULT_ZOOM_LEVELS = [14, 15];
@@ -20,14 +29,11 @@ export interface TileDownloadProgress {
 
 type ProgressCallback = (p: TileDownloadProgress) => void;
 
-/** Returns the local file:// URI for a tile — used by MapView LocalTile. */
-export function getTileTemplate(): string {
-  return `file://${TILE_DIR}/{z}/{x}/{y}.png`;
-}
-
 /**
  * Download tiles in a square area around a single point (e.g. current GPS location).
- * radiusKm controls how far out to cache (2km is ~1 city block ring at z14).
+ * Saves in the same format as MapTileProvider.java: {TILE_CACHE_DIR}/{z}/{x}/{y} (no extension)
+ * so that UrlTile's native cache read finds them when offline.
+ * radiusKm controls how far out to cache (2km covers a useful area at z14).
  */
 export async function downloadTilesAroundPoint(
   center: LatLon,
@@ -44,7 +50,7 @@ export async function downloadTilesAroundPoint(
     minLon: center.lon - lonDelta,
     maxLon: center.lon + lonDelta,
   };
-  await ensureDir(TILE_DIR);
+  await ensureDir(TILE_CACHE_DIR);
   const tileList = enumerateTiles(bbox, zoomLevels);
   const progress: TileDownloadProgress = {downloaded: 0, total: tileList.length, failed: 0};
   const BATCH = 10;
@@ -74,7 +80,7 @@ export async function downloadTilesForRoute(
   zoomLevels: number[] = DEFAULT_ZOOM_LEVELS,
   onProgress?: ProgressCallback,
 ): Promise<TileDownloadProgress> {
-  await ensureDir(TILE_DIR);
+  await ensureDir(TILE_CACHE_DIR);
 
   const bbox = computeBBox(polyline);
   const tileList = enumerateTiles(bbox, zoomLevels);
@@ -158,8 +164,10 @@ function enumerateTiles(bbox: BBox, zoomLevels: number[]): TileCoord[] {
 }
 
 async function downloadTile(z: number, x: number, y: number): Promise<void> {
-  const dir = `${TILE_DIR}/${z}/${x}`;
-  const path = `${dir}/${y}.png`;
+  const dir = `${TILE_CACHE_DIR}/${z}/${x}`;
+  // No .png extension — matches MapTileProvider.java getTileFilename() format:
+  //   return tileCachePath + '/' + zoom + "/" + x + "/" + y;
+  const path = `${dir}/${y}`;
 
   const exists = await RNFS.exists(path);
   if (exists) {
@@ -172,8 +180,8 @@ async function downloadTile(z: number, x: number, y: number): Promise<void> {
     fromUrl: url,
     toFile: path,
     headers: {'User-Agent': 'SmartHelmetNav/1.0'},
-    connectionTimeout: 10000, // 10s to connect
-    readTimeout: 10000,       // 10s to read response
+    connectionTimeout: 10000,
+    readTimeout: 10000,
   }).promise;
 }
 
@@ -186,7 +194,7 @@ async function ensureDir(path: string): Promise<void> {
 
 async function trimCache(): Promise<void> {
   try {
-    const items = await RNFS.readDir(TILE_DIR);
+    const items = await RNFS.readDir(TILE_CACHE_DIR);
     // Get all png files recursively (simplified: scan z-level dirs)
     const files: {path: string; mtime: Date; size: number}[] = [];
     for (const item of items) {

@@ -57,10 +57,23 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
   const [originCoords, setOriginCoords] = useState<LatLon | null>(null);
   const [fetchingLoc, setFetchingLoc] = useState(false);
 
-  const handleUseMyLocation = () => {
+  const handleUseMyLocation = async () => {
     setFetchingLoc(true);
     setOrigin('Fetching GPS…');
     setOriginCoords(null);
+
+    // Ensure location permission is granted before calling GPS API
+    const perms = await requestApplicationPermissions();
+    if (!perms.fineLocation) {
+      setOrigin('VNIT Nagpur');
+      setOriginCoords(null);
+      setFetchingLoc(false);
+      Alert.alert(
+        'Location permission required',
+        'Grant "Fine location" permission to use your current location as the start point.',
+      );
+      return;
+    }
 
     Geolocation.getCurrentPosition(
       pos => {

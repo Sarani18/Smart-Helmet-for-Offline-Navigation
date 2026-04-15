@@ -20,7 +20,6 @@ import {
   View,
 } from 'react-native';
 import MapView, {
-  LocalTile,
   Marker,
   Polyline,
   UrlTile,
@@ -39,7 +38,7 @@ import {
   type CoordinatorPosition,
   type PositionMode,
 } from '../services/positionCoordinator';
-import {getTileTemplate, downloadTilesAroundPoint} from '../services/tileService';
+import {TILE_CACHE_DIR, downloadTilesAroundPoint} from '../services/tileService';
 import type {ParsedRoute, LatLon} from '../services/routeService';
 
 interface Props {
@@ -85,7 +84,6 @@ const NavigationScreen: React.FC<Props> = ({
   const [mapReady, setMapReady] = useState(false);
   // Track whether we've done the first-fix tile download around user position
   const firstFixDone = useRef(false);
-  const tileUrl = getTileTemplate();
 
   const polylineCoords = route.polyline.map(p => ({
     latitude: p.lat,
@@ -215,15 +213,23 @@ const NavigationScreen: React.FC<Props> = ({
         initialRegion={initialRegion}
         onMapReady={() => setMapReady(true)}>
 
-        {/* Live OSM tiles — visible immediately when online */}
+        {/*
+          OSM tiles via UrlTile:
+          - tileCachePath tells native MapTileProvider where to cache tiles on disk.
+            Format: {TILE_CACHE_DIR}/{z}/{x}/{y}  (no extension — matches MapTileProvider.java)
+          - When online: fetches from OSM and saves to tileCachePath automatically.
+          - When offline: reads from tileCachePath if previously cached.
+          - maximumZ=19: don't request zoom levels OSM doesn't serve.
+          - flipY=false: OSM uses standard XYZ (not TMS) tile scheme.
+        */}
         <UrlTile
           urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          tileCachePath={TILE_CACHE_DIR}
+          maximumZ={19}
+          flipY={false}
           zIndex={1}
           tileSize={256}
         />
-
-        {/* Offline-cached tiles — served from disk when no internet */}
-        <LocalTile pathTemplate={tileUrl} tileSize={256} zIndex={2} />
 
         {/* Route polyline */}
         {polylineCoords.length > 0 && (
