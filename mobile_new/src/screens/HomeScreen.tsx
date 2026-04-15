@@ -41,13 +41,14 @@ interface Props {
     origin: LatLon,
     dest: LatLon,
   ) => void;
+  onDemo: () => void;
 }
 
 function makeSessionId(): string {
   return `ride_${Date.now()}`;
 }
 
-const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
+const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
   const insets = useSafeAreaInsets();
   const [origin, setOrigin] = useState('VNIT Nagpur');
   const [destination, setDestination] = useState('Nagpur Airport');
@@ -259,6 +260,19 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
           </Text>
         </Pressable>
 
+        <Pressable
+          style={({pressed}) => [
+            styles.demoButton,
+            pressed && styles.demoButtonPressed,
+            loading && styles.startButtonDisabled,
+          ]}
+          onPress={onDemo}
+          disabled={loading}>
+          <Text style={styles.demoButtonText}>
+            {'⬡  Demo Mode (CyberHub → IGI)'}
+          </Text>
+        </Pressable>
+
         <Text style={styles.hint}>
           First use requires internet for route + tiles.{'\n'}
           Same route loads instantly on retry.
@@ -330,6 +344,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
+  demoButton: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#1a73e8',
+  },
+  demoButtonPressed: {backgroundColor: '#e8f0fe', transform: [{scale: 0.98}]},
+  demoButtonText: {color: '#1a73e8', fontSize: 15, fontWeight: '700'},
   hint: {textAlign: 'center', fontSize: 11, color: '#aaa', lineHeight: 17},
   inputRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   inputFlex: {flex: 1},

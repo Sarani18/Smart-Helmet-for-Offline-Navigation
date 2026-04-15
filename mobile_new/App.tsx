@@ -3,13 +3,14 @@
  * Routes between HomeScreen (route setup) and NavigationScreen (live nav).
  */
 
-import React, {useState} from 'react';
-import {SafeAreaProvider} from 'react-native-safe-area-context';
+import React, { useState } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
 import NavigationScreen from './src/screens/NavigationScreen';
-import type {ParsedRoute, LatLon} from './src/services/routeService';
+import DemoApp from './src/demo/DemoApp';
+import type { ParsedRoute, LatLon } from './src/services/routeService';
 
-type Screen = 'home' | 'navigation';
+type Screen = 'home' | 'navigation' | 'demo';
 
 interface NavSession {
   sessionId: string;
@@ -28,7 +29,7 @@ function App(): React.JSX.Element {
     origin: LatLon,
     dest: LatLon,
   ) => {
-    setSession({sessionId, route, origin, dest});
+    setSession({ sessionId, route, origin, dest });
     setScreen('navigation');
   };
 
@@ -40,7 +41,10 @@ function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       {screen === 'home' && (
-        <HomeScreen onNavigationStarted={handleNavigationStarted} />
+        <HomeScreen
+          onNavigationStarted={handleNavigationStarted}
+          onDemo={() => setScreen('demo')}
+        />
       )}
       {screen === 'navigation' && session && (
         <NavigationScreen
@@ -50,6 +54,9 @@ function App(): React.JSX.Element {
           dest={session.dest}
           onStop={handleStop}
         />
+      )}
+      {screen === 'demo' && (
+        <DemoApp onExit={() => setScreen('home')} />
       )}
     </SafeAreaProvider>
   );
