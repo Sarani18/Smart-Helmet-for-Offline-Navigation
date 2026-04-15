@@ -20,6 +20,15 @@ This module has two closely related responsibilities:
 
 ```
 embedded/
+├── ESP32_LED_HELMET_SETUP.md  # Step-by-step hardware and BLE setup guide
+├── esp32_firmware/
+│   └── smart_helmet_ble_led.ino
+├── tools/
+│   ├── ble_constants.py
+│   ├── ble_scan.py
+│   ├── ble_send_command.py
+│   ├── ncs_ble_bridge.py
+│   └── requirements.txt
 ├── bluetooth_comm.py        # BLE connection management
 ├── led_controller.py        # LED pattern logic
 ├── instruction_parser.py    # Binary/text packet decoder
@@ -107,3 +116,14 @@ embedded/
 
 - Python standard library only (`enum`, `dataclasses`).
 - In production: `bleak` (cross-platform BLE library) for `BluetoothComm`.
+
+---
+
+## Prototype Hardware Quick Start
+
+For the ESP32 + LED helmet prototype and laptop BLE testing flow, use:
+
+1. `ESP32_LED_HELMET_SETUP.md` for full beginner-friendly instructions.
+2. `esp32_firmware/smart_helmet_ble_led.ino` for the firmware to upload.
+3. `tools/ble_scan.py` and `tools/ble_send_command.py` for manual BLE testing.
+4. `tools/ncs_ble_bridge.py` to relay NCS UI state to ESP32 commands.
