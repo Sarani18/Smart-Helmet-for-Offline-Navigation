@@ -22,6 +22,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Geolocation from '@react-native-community/geolocation';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {requestApplicationPermissions} from '../utils/permissions';
 import {
@@ -52,6 +53,44 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
   const [destination, setDestination] = useState('Nagpur Airport');
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
+  // When user taps "My Location", we store the raw coords to skip geocoding
+  const [originCoords, setOriginCoords] = useState<LatLon | null>(null);
+  const [fetchingLoc, setFetchingLoc] = useState(false);
+
+  const handleUseMyLocation = () => {
+    setFetchingLoc(true);
+    setOrigin('Fetching GPS…');
+    setOriginCoords(null);
+
+    Geolocation.getCurrentPosition(
+      pos => {
+        const coords: LatLon = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+        };
+        setOriginCoords(coords);
+        // Show rounded coords as a readable label
+        const label = `${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`;
+        setOrigin(label);
+        setFetchingLoc(false);
+      },
+      err => {
+        console.warn('getCurrentPosition failed:', err.code, err.message);
+        setOrigin('VNIT Nagpur'); // revert to default
+        setOriginCoords(null);
+        setFetchingLoc(false);
+        Alert.alert(
+          'Location unavailable',
+          `Could not get your GPS position (${err.message}).\n\nMake sure GPS is enabled and you have location permission.`,
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 60000, // 60s — try hard to get a fix
+        maximumAge: 10000,
+      },
+    );
+  };
 
   const handleStart = async () => {
     if (!origin.trim() || !destination.trim()) {
@@ -91,23 +130,26 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
         return;
       }
 
-      // Step 3: Geocode (15s timeout each)
-      setStatusText('Geocoding locations… (may take up to 15s)');
-      const [originCoords, destCoords] = await Promise.all([
-        geocode(origin.trim()),
-        geocode(destination.trim()),
-      ]);
+      // Step 3: Geocode (only destination if current-location was used for origin)
+      setStatusText('Geocoding locations…');
+      let resolvedOrigin: LatLon;
+      if (originCoords) {
+        resolvedOrigin = originCoords; // already have GPS coords — skip geocoding
+      } else {
+        resolvedOrigin = await geocode(origin.trim());
+      }
+      const destCoords = await geocode(destination.trim());
 
-      // Step 4: Fetch route from OSRM (15s timeout)
-      setStatusText('Fetching route from OSRM… (may take up to 15s)');
-      const route = await fetchRoute(originCoords, destCoords, sessionId, cacheKey);
+      // Step 4: Fetch route from OSRM
+      setStatusText('Fetching route from OSRM… (may take up to 2 min)');
+      const route = await fetchRoute(resolvedOrigin, destCoords, sessionId, cacheKey);
 
       // Step 5: Navigate immediately — tiles download in background
       setStatusText('Starting navigation…');
       downloadTilesForRoute(route.polyline, [14, 15]).catch(e =>
         console.warn('Background tile download failed:', e),
       );
-      onNavigationStarted(sessionId, route, originCoords, destCoords);
+      onNavigationStarted(sessionId, route, resolvedOrigin, destCoords);
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -134,15 +176,34 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
 
         <View style={styles.card}>
           <Text style={styles.inputLabel}>FROM</Text>
-          <TextInput
-            style={styles.input}
-            value={origin}
-            onChangeText={setOrigin}
-            placeholder="e.g. VNIT Nagpur"
-            placeholderTextColor="#aaa"
-            returnKeyType="next"
-            editable={!loading}
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              style={[styles.input, styles.inputFlex]}
+              value={origin}
+              onChangeText={text => {
+                setOrigin(text);
+                setOriginCoords(null); // clear saved coords when user types
+              }}
+              placeholder="e.g. VNIT Nagpur"
+              placeholderTextColor="#aaa"
+              returnKeyType="next"
+              editable={!loading && !fetchingLoc}
+            />
+            <Pressable
+              style={({pressed}) => [
+                styles.locButton,
+                pressed && styles.locButtonPressed,
+                (loading || fetchingLoc) && styles.locButtonDisabled,
+              ]}
+              onPress={handleUseMyLocation}
+              disabled={loading || fetchingLoc}>
+              {fetchingLoc ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.locButtonText}>{'\u25CE'} Me</Text>
+              )}
+            </Pressable>
+          </View>
           <View style={styles.divider} />
           <Text style={styles.inputLabel}>TO</Text>
           <TextInput
@@ -257,6 +318,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   hint: {textAlign: 'center', fontSize: 11, color: '#aaa', lineHeight: 17},
+  inputRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  inputFlex: {flex: 1},
+  locButton: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 52,
+  },
+  locButtonPressed: {backgroundColor: '#1558b0'},
+  locButtonDisabled: {backgroundColor: '#9dbfef'},
+  locButtonText: {color: '#fff', fontSize: 12, fontWeight: '700'},
 });
 
 export default HomeScreen;

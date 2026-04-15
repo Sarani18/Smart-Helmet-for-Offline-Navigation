@@ -26,6 +26,46 @@ export function getTileTemplate(): string {
 }
 
 /**
+ * Download tiles in a square area around a single point (e.g. current GPS location).
+ * radiusKm controls how far out to cache (2km is ~1 city block ring at z14).
+ */
+export async function downloadTilesAroundPoint(
+  center: LatLon,
+  radiusKm: number = 2,
+  zoomLevels: number[] = DEFAULT_ZOOM_LEVELS,
+  onProgress?: ProgressCallback,
+): Promise<TileDownloadProgress> {
+  // Approximate lat/lon degrees from km
+  const latDelta = radiusKm / 111.0;
+  const lonDelta = radiusKm / (111.0 * Math.cos((center.lat * Math.PI) / 180));
+  const bbox: BBox = {
+    minLat: center.lat - latDelta,
+    maxLat: center.lat + latDelta,
+    minLon: center.lon - lonDelta,
+    maxLon: center.lon + lonDelta,
+  };
+  await ensureDir(TILE_DIR);
+  const tileList = enumerateTiles(bbox, zoomLevels);
+  const progress: TileDownloadProgress = {downloaded: 0, total: tileList.length, failed: 0};
+  const BATCH = 10;
+  for (let i = 0; i < tileList.length; i += BATCH) {
+    const batch = tileList.slice(i, i + BATCH);
+    await Promise.all(
+      batch.map(async ({z, x, y}) => {
+        try {
+          await downloadTile(z, x, y);
+          progress.downloaded++;
+        } catch (_) {
+          progress.failed++;
+        }
+        onProgress?.(progress);
+      }),
+    );
+  }
+  return progress;
+}
+
+/**
  * Download all tiles covering the route polyline bounding box.
  * Skips tiles already cached on disk.
  */

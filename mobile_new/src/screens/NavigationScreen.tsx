@@ -14,7 +14,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   Alert,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -24,6 +23,7 @@ import MapView, {
   LocalTile,
   Marker,
   Polyline,
+  UrlTile,
   type Region,
 } from 'react-native-maps';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -39,7 +39,7 @@ import {
   type CoordinatorPosition,
   type PositionMode,
 } from '../services/positionCoordinator';
-import {getTileTemplate} from '../services/tileService';
+import {getTileTemplate, downloadTilesAroundPoint} from '../services/tileService';
 import type {ParsedRoute, LatLon} from '../services/routeService';
 
 interface Props {
@@ -83,6 +83,8 @@ const NavigationScreen: React.FC<Props> = ({
   const mapRef = useRef<MapView>(null);
   const [nav, setNav] = useState<NavDisplay>(INITIAL_NAV);
   const [mapReady, setMapReady] = useState(false);
+  // Track whether we've done the first-fix tile download around user position
+  const firstFixDone = useRef(false);
   const tileUrl = getTileTemplate();
 
   const polylineCoords = route.polyline.map(p => ({
@@ -153,6 +155,14 @@ const NavigationScreen: React.FC<Props> = ({
         bleService.sendGPSStatus(pos.positionMode === 'GPS');
       }
 
+      // On first valid GPS fix, download tiles around current location for offline use
+      if (!firstFixDone.current && pos.positionMode === 'GPS') {
+        firstFixDone.current = true;
+        downloadTilesAroundPoint({lat: pos.lat, lon: pos.lon}, 2, [14, 15]).catch(e =>
+          console.warn('Tile download around current location failed:', e),
+        );
+      }
+
       // Pan map to current position
       if (mapReady && mapRef.current && pos.positionMode !== 'UNKNOWN') {
         mapRef.current.animateToRegion(
@@ -199,19 +209,29 @@ const NavigationScreen: React.FC<Props> = ({
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapType={Platform.OS === 'android' ? 'none' : 'standard'}
+        mapType="none"
         provider={undefined}
         rotateEnabled={false}
         initialRegion={initialRegion}
         onMapReady={() => setMapReady(true)}>
-        <LocalTile pathTemplate={tileUrl} tileSize={256} zIndex={-1} />
+
+        {/* Live OSM tiles — visible immediately when online */}
+        <UrlTile
+          urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          zIndex={1}
+          tileSize={256}
+        />
+
+        {/* Offline-cached tiles — served from disk when no internet */}
+        <LocalTile pathTemplate={tileUrl} tileSize={256} zIndex={2} />
 
         {/* Route polyline */}
         {polylineCoords.length > 0 && (
           <Polyline
             coordinates={polylineCoords}
             strokeColor="#1a73e8"
-            strokeWidth={4}
+            strokeWidth={5}
+            zIndex={3}
           />
         )}
 
@@ -220,6 +240,7 @@ const NavigationScreen: React.FC<Props> = ({
           coordinate={{latitude: origin.lat, longitude: origin.lon}}
           title="Start"
           pinColor="green"
+          zIndex={4}
         />
 
         {/* Destination marker */}
@@ -227,20 +248,51 @@ const NavigationScreen: React.FC<Props> = ({
           coordinate={{latitude: dest.lat, longitude: dest.lon}}
           title="Destination"
           pinColor="red"
+          zIndex={4}
         />
 
-        {/* Current position */}
-        {nav.currentPos && nav.navMode !== 'UNKNOWN' && (
+        {/* Current position — blue pulsing dot */}
+        {nav.currentPos && (
           <Marker
             coordinate={{
               latitude: nav.currentPos.lat,
               longitude: nav.currentPos.lon,
             }}
-            title="You"
-            pinColor={modeColor[nav.navMode]}
-          />
+            title="You are here"
+            anchor={{x: 0.5, y: 0.5}}
+            zIndex={10}>
+            <View style={styles.userDotOuter}>
+              <View
+                style={[
+                  styles.userDotInner,
+                  {backgroundColor: modeColor[nav.navMode]},
+                ]}
+              />
+            </View>
+          </Marker>
         )}
       </MapView>
+
+      {/* Recenter button */}
+      {nav.currentPos && (
+        <Pressable
+          style={styles.recenterButton}
+          onPress={() => {
+            if (mapRef.current && nav.currentPos) {
+              mapRef.current.animateToRegion(
+                {
+                  latitude: nav.currentPos.lat,
+                  longitude: nav.currentPos.lon,
+                  latitudeDelta: 0.005,
+                  longitudeDelta: 0.005,
+                },
+                400,
+              );
+            }
+          }}>
+          <Text style={styles.recenterText}>{'\u2316'}</Text>
+        </Pressable>
+      )}
 
       {/* No-signal warning banner */}
       {nav.navMode === 'UNKNOWN' && (
@@ -396,6 +448,47 @@ const styles = StyleSheet.create({
   },
   stopButtonPressed: {backgroundColor: '#c5221f', transform: [{scale: 0.98}]},
   stopButtonText: {color: '#fff', fontSize: 16, fontWeight: '700'},
+
+  // User position marker
+  userDotOuter: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderWidth: 2,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+  },
+  userDotInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+
+  // Recenter button
+  recenterButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 100,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  recenterText: {fontSize: 24, color: '#1a73e8'},
 });
 
 export default NavigationScreen;
