@@ -38,6 +38,16 @@ def main():
         time.sleep(1)
         res2 = requests.post("http://localhost:8000/api/navigation/connectivity/status", json=payload)
         print("Second attempt (bypasses hysteresis) - Navigation Response:", res2.json())
+        
+        # ACTUALLY dispatch the commands to the local services
+        commands = res2.json().get("commands", [])
+        for cmd in commands:
+            port = 8001 if cmd["module"] == "VISUAL" else 8002
+            try:
+                requests.post(f"http://localhost:{port}/api/localization/control", json=cmd)
+                print(f"--> Dispatched {cmd['action']} to {cmd['module']} on port {port}")
+            except Exception as e:
+                print(f"Failed to dispatch to port {port}: {e}")
     except Exception as e:
         print("Error contacting Navigation:", e)
     
