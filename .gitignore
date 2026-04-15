@@ -83,3 +83,4 @@ localization/CV/auto_label_scenes.py
 localization/CV/setup_dataset.py
 localization/CV/generate_labels.py
 localization/CV/scene_labels.csv
+*.mp4
