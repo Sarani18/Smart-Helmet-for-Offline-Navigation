@@ -33,8 +33,11 @@ def main():
     }
     
     try:
-        res = requests.post("http://localhost:8000/api/navigation/connectivity/status", json=payload)
-        print("Navigation Response:", res.json())
+        res1 = requests.post("http://localhost:8000/api/navigation/connectivity/status", json=payload)
+        print("First attempt - Navigation Response:", res1.json())
+        time.sleep(1)
+        res2 = requests.post("http://localhost:8000/api/navigation/connectivity/status", json=payload)
+        print("Second attempt (bypasses hysteresis) - Navigation Response:", res2.json())
     except Exception as e:
         print("Error contacting Navigation:", e)
     
