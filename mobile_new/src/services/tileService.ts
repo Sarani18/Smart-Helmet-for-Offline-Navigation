@@ -132,6 +132,8 @@ async function downloadTile(z: number, x: number, y: number): Promise<void> {
     fromUrl: url,
     toFile: path,
     headers: {'User-Agent': 'SmartHelmetNav/1.0'},
+    connectionTimeout: 10000, // 10s to connect
+    readTimeout: 10000,       // 10s to read response
   }).promise;
 }
 

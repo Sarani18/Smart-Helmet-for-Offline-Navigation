@@ -51,11 +51,12 @@
         </intent-filter>
       </activity>
 
-      <!-- Background foreground service for BLE + navigation persistence -->
-      <service
-        android:name="com.asterinet.reaction.bgTask.RNBackgroundActionsTask"
-        android:foregroundServiceType="connectedDevice|location"
-        android:exported="false" />
+      <!-- Required by react-native-maps native init even when using OSM LocalTile.
+           No real Google Maps tiles are fetched because mapType="none" in JS. -->
+      <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="placeholder" />
+
 
     </application>
 </manifest>

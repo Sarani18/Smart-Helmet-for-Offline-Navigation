@@ -1,14 +1,12 @@
 /**
  * HomeScreen
  *
- * Rider enters origin and destination. On "Start Navigation":
- *   1. Request Android permissions (location, BLE)
- *   2. Geocode via Nominatim
- *   3. Fetch route via OSRM and cache to disk
- *   4. Download OSM tiles for the route bounding box (with progress)
- *   5. Hand off to NavigationScreen
- *
- * No external server required — all logic runs on-device.
+ * Flow on "Start Navigation":
+ *   1. Request Android permissions
+ *   2. Check route cache (same origin+dest → skip all network, navigate instantly)
+ *   3. Geocode via Nominatim (15s timeout)
+ *   4. Fetch route via OSRM (15s timeout, cached to disk)
+ *   5. Navigate immediately — tile download runs in background
  */
 
 import React, {useState} from 'react';
@@ -26,7 +24,12 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {requestApplicationPermissions} from '../utils/permissions';
-import {geocode, fetchRoute} from '../services/routeService';
+import {
+  geocode,
+  fetchRoute,
+  makeRouteCacheKey,
+  loadCachedRoute,
+} from '../services/routeService';
 import {downloadTilesForRoute} from '../services/tileService';
 import type {ParsedRoute, LatLon} from '../services/routeService';
 
@@ -49,7 +52,6 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
   const [destination, setDestination] = useState('Nagpur Airport');
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
-  const [tileProgress, setTileProgress] = useState<{d: number; t: number} | null>(null);
 
   const handleStart = async () => {
     if (!origin.trim() || !destination.trim()) {
@@ -58,11 +60,10 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
     }
 
     setLoading(true);
-    setTileProgress(null);
+    setStatusText('Checking permissions…');
 
     try {
       // Step 1: Permissions
-      setStatusText('Requesting permissions…');
       const perms = await requestApplicationPermissions();
       if (!perms.allCriticalGranted) {
         Alert.alert(
@@ -72,33 +73,48 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
         return;
       }
 
-      // Step 2: Geocode
-      setStatusText('Geocoding locations…');
+      const sessionId = makeSessionId();
+      const cacheKey = makeRouteCacheKey(origin.trim(), destination.trim());
+
+      // Step 2: Try cache first — no network needed
+      setStatusText('Checking local cache…');
+      const cached = await loadCachedRoute(cacheKey);
+      if (cached) {
+        // Need coordinates for the map markers — geocode quickly (or use route endpoints)
+        const firstPt = cached.polyline[0];
+        const lastPt = cached.polyline[cached.polyline.length - 1];
+        // Kick off background tile download (non-blocking)
+        downloadTilesForRoute(cached.polyline, [14, 15]).catch(e =>
+          console.warn('Background tile download failed:', e),
+        );
+        onNavigationStarted(sessionId, {...cached, id: sessionId}, firstPt, lastPt);
+        return;
+      }
+
+      // Step 3: Geocode (15s timeout each)
+      setStatusText('Geocoding locations… (may take up to 15s)');
       const [originCoords, destCoords] = await Promise.all([
         geocode(origin.trim()),
         geocode(destination.trim()),
       ]);
 
-      // Step 3: Fetch route from OSRM and cache
-      setStatusText('Fetching route from OSRM…');
-      const sessionId = makeSessionId();
-      const route = await fetchRoute(originCoords, destCoords, sessionId);
+      // Step 4: Fetch route from OSRM (15s timeout)
+      setStatusText('Fetching route from OSRM… (may take up to 15s)');
+      const route = await fetchRoute(originCoords, destCoords, sessionId, cacheKey);
 
-      // Step 4: Download tiles for the route bounding box
-      setStatusText('Downloading offline map tiles…');
-      await downloadTilesForRoute(route.polyline, [14, 15], p => {
-        setTileProgress({d: p.downloaded, t: p.total});
-      });
-
-      // Step 5: Hand off
+      // Step 5: Navigate immediately — tiles download in background
+      setStatusText('Starting navigation…');
+      downloadTilesForRoute(route.polyline, [14, 15]).catch(e =>
+        console.warn('Background tile download failed:', e),
+      );
       onNavigationStarted(sessionId, route, originCoords, destCoords);
+
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Error', msg);
+      Alert.alert('Could not start navigation', msg);
     } finally {
       setLoading(false);
       setStatusText('');
-      setTileProgress(null);
     }
   };
 
@@ -143,23 +159,16 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
 
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            {'↳ Route fetched from OSRM (on first use)\n'}
-            {'↳ Map tiles downloaded and cached offline\n'}
-            {'↳ Navigation runs fully on-device — no server needed'}
+            {'↳ Route cached after first fetch — retries are instant\n'}
+            {'↳ Map tiles download in background after navigation starts\n'}
+            {'↳ Works fully offline once route is cached'}
           </Text>
         </View>
 
         {loading && (
           <View style={styles.statusRow}>
             <ActivityIndicator color="#1a73e8" />
-            <View style={styles.statusTextCol}>
-              <Text style={styles.statusText}>{statusText}</Text>
-              {tileProgress && (
-                <Text style={styles.tileText}>
-                  Tiles: {tileProgress.d} / {tileProgress.t}
-                </Text>
-              )}
-            </View>
+            <Text style={styles.statusText}>{statusText}</Text>
           </View>
         )}
 
@@ -172,13 +181,13 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
           onPress={handleStart}
           disabled={loading}>
           <Text style={styles.startButtonText}>
-            {loading ? 'Setting up…' : '▶  Start Navigation'}
+            {loading ? 'Loading…' : '▶  Start Navigation'}
           </Text>
         </Pressable>
 
         <Text style={styles.hint}>
-          Requires internet on first use to download route + tiles.{'\n'}
-          After that, works fully offline.
+          First use requires internet for route + tiles.{'\n'}
+          Same route loads instantly on retry.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -222,13 +231,11 @@ const styles = StyleSheet.create({
   infoText: {fontSize: 12, color: '#1a5276', lineHeight: 20},
   statusRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
     marginBottom: 12,
   },
-  statusTextCol: {flexDirection: 'column'},
-  statusText: {fontSize: 13, color: '#555'},
-  tileText: {fontSize: 11, color: '#888', marginTop: 2},
+  statusText: {fontSize: 13, color: '#555', flex: 1},
   startButton: {
     backgroundColor: '#1a73e8',
     borderRadius: 14,
