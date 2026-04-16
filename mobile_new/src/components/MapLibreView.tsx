@@ -18,12 +18,16 @@ import type {WebViewMessageEvent} from 'react-native-webview';
 // ── types ─────────────────────────────────────────────────────────────────────
 
 export interface MapLibreMessage {
-  type: 'setRoute' | 'setRider' | 'flyTo';
+  type: 'setRoute' | 'setRider' | 'flyTo' | 'setMarker';
   coords?: [number, number][];   // [lon, lat] pairs — for setRoute
   lon?: number;
   lat?: number;
   color?: string;
   zoom?: number;
+  /** setMarker only — unique id so the marker can be updated in place */
+  markerId?: string;
+  /** setMarker only — size of the dot in px (default 14) */
+  markerSize?: number;
 }
 
 export interface MapLibreViewRef {
@@ -108,6 +112,9 @@ function buildHtml(lon: number, lat: number, zoom: number): string {
         .setLngLat([${lon}, ${lat}])
         .addTo(map);
 
+      // Named static markers registry (origin, dest, etc.)
+      window._markers = {};
+
       // Signal ready to React Native
       if (window.ReactNativeWebView) {
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
@@ -134,6 +141,18 @@ function buildHtml(lon: number, lat: number, zoom: number): string {
         }
       } else if (msg.type === 'flyTo') {
         map.flyTo({ center: [msg.lon, msg.lat], zoom: msg.zoom || map.getZoom(), duration: 400 });
+      } else if (msg.type === 'setMarker' && msg.markerId) {
+        var sz = (msg.markerSize || 14) + 'px';
+        if (window._markers[msg.markerId]) {
+          window._markers[msg.markerId].setLngLat([msg.lon, msg.lat]);
+          window._markers[msg.markerId].getElement().style.background = msg.color || '#1A73E8';
+        } else {
+          var el = document.createElement('div');
+          el.style.cssText = 'width:' + sz + ';height:' + sz + ';border-radius:50%;background:' + (msg.color || '#1A73E8') + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+          window._markers[msg.markerId] = new maplibregl.Marker({ element: el, anchor: 'center' })
+            .setLngLat([msg.lon, msg.lat])
+            .addTo(map);
+        }
       }
     }
   </script>

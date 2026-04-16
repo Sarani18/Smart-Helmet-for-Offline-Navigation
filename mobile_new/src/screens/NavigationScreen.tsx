@@ -1,10 +1,12 @@
 /**
  * NavigationScreen
  *
- * Standalone live navigation — no NCS server needed.
+ * Live navigation using MapLibre GL + OSM tiles — same map stack as the demo
+ * and embedded/web_ui.  No Google Maps SDK required.
+ *
  * On mount: starts GPS, IMU sensors, DR, BLE, and position coordinator.
- * Position coordinator feeds navigation engine every 500ms.
- * MapView renders offline OSM tiles from DocumentDirectoryPath.
+ * Position coordinator feeds navigation engine every 500ms and sends map
+ * updates (rider position, camera pan) to MapLibreView via postMessage.
  *
  * Sensor failure policy:
  *   GPS lost   → DR mode (DEGRADED badge)
@@ -19,12 +21,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import MapView, {
-  Marker,
-  Polyline,
-  UrlTile,
-  type Region,
-} from 'react-native-maps';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import * as gpsService from '../services/gpsService';
@@ -38,7 +34,9 @@ import {
   type CoordinatorPosition,
   type PositionMode,
 } from '../services/positionCoordinator';
-import {TILE_CACHE_DIR, downloadTilesAroundPoint} from '../services/tileService';
+import {downloadTilesAroundPoint} from '../services/tileService';
+import MapLibreView from '../components/MapLibreView';
+import type {MapLibreViewRef} from '../components/MapLibreView';
 import type {ParsedRoute, LatLon} from '../services/routeService';
 
 interface Props {
@@ -71,6 +69,17 @@ const INITIAL_NAV: NavDisplay = {
   currentPos: null,
 };
 
+const MODE_COLOR: Record<PositionMode, string> = {
+  GPS: '#34a853',
+  DR: '#fbbc04',
+  UNKNOWN: '#ea4335',
+};
+const MODE_LABEL: Record<PositionMode, string> = {
+  GPS: 'GPS',
+  DR: 'DEAD RECKONING',
+  UNKNOWN: 'NO SIGNAL',
+};
+
 const NavigationScreen: React.FC<Props> = ({
   sessionId: _sessionId,
   route,
@@ -79,44 +88,38 @@ const NavigationScreen: React.FC<Props> = ({
   onStop,
 }) => {
   const insets = useSafeAreaInsets();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapLibreViewRef>(null);
   const [nav, setNav] = useState<NavDisplay>(INITIAL_NAV);
-  const [mapReady, setMapReady] = useState(false);
-  // Track whether we've done the first-fix tile download around user position
   const firstFixDone = useRef(false);
+  const arrivedShown = useRef(false);
 
-  const polylineCoords = route.polyline.map(p => ({
-    latitude: p.lat,
-    longitude: p.lon,
-  }));
+  // Pre-build route coords once ([lon, lat] for MapLibre)
+  const routeCoords = useRef<[number, number][]>(
+    route.polyline.map(p => [p.lon, p.lat]),
+  );
 
-  // Start all services on mount, tear down on unmount
-  useEffect(() => {
-    navigationEngine.loadRoute(route);
+  // ── map ready: draw route + origin/dest pins ────────────────────────────────
+  const handleMapReady = useCallback(() => {
+    mapRef.current?.send({type: 'setRoute', coords: routeCoords.current});
+    mapRef.current?.send({
+      type: 'setMarker',
+      markerId: 'origin',
+      lon: origin.lon,
+      lat: origin.lat,
+      color: '#34a853',
+      markerSize: 16,
+    });
+    mapRef.current?.send({
+      type: 'setMarker',
+      markerId: 'dest',
+      lon: dest.lon,
+      lat: dest.lat,
+      color: '#ea4335',
+      markerSize: 16,
+    });
+  }, [origin, dest]);
 
-    gpsService.startGPS();
-    sensorService.startSensors();
-    startCoordinator();
-
-    // BLE is optional — non-blocking
-    bleService.startBLE().catch(e =>
-      console.warn('BLE start failed (navigation continues):', e),
-    );
-
-    // Listen to coordinator positions
-    const unsubscribe = addPositionListener(handlePosition);
-
-    return () => {
-      unsubscribe();
-      stopCoordinator();
-      gpsService.stopGPS();
-      sensorService.stopSensors();
-      bleService.stopBLE();
-      navigationEngine.unloadRoute();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // ── position updates from coordinator ──────────────────────────────────────
   const handlePosition = useCallback(
     (pos: CoordinatorPosition) => {
       if (pos.lat === 0 && pos.lon === 0 && pos.positionMode === 'UNKNOWN') {
@@ -130,12 +133,12 @@ const NavigationScreen: React.FC<Props> = ({
       }
 
       const state = navigationEngine.updatePosition(pos.lat, pos.lon);
-
-      const navMode: NavMode = pos.positionMode === 'GPS'
-        ? 'GPS'
-        : pos.positionMode === 'DR'
-        ? 'DR'
-        : 'UNKNOWN';
+      const navMode: NavMode =
+        pos.positionMode === 'GPS'
+          ? 'GPS'
+          : pos.positionMode === 'DR'
+          ? 'DR'
+          : 'UNKNOWN';
 
       setNav({
         instruction: state.nextInstructionText,
@@ -147,6 +150,24 @@ const NavigationScreen: React.FC<Props> = ({
         currentPos: {lat: pos.lat, lon: pos.lon},
       });
 
+      // Update rider dot on map
+      mapRef.current?.send({
+        type: 'setRider',
+        lon: pos.lon,
+        lat: pos.lat,
+        color: MODE_COLOR[pos.positionMode],
+      });
+
+      // Pan map to follow rider (only when we have a real position)
+      if (pos.positionMode !== 'UNKNOWN') {
+        mapRef.current?.send({
+          type: 'flyTo',
+          lon: pos.lon,
+          lat: pos.lat,
+          zoom: 15,
+        });
+      }
+
       // Notify helmet via BLE
       if (bleService.isBLEConnected()) {
         bleService.sendNavInstruction(state.nextInstructionText, state.distanceToNextM);
@@ -156,168 +177,95 @@ const NavigationScreen: React.FC<Props> = ({
       // On first valid GPS fix, download tiles around current location for offline use
       if (!firstFixDone.current && pos.positionMode === 'GPS') {
         firstFixDone.current = true;
-        downloadTilesAroundPoint({lat: pos.lat, lon: pos.lon}, 2, [14, 15]).catch(e =>
-          console.warn('Tile download around current location failed:', e),
+        downloadTilesAroundPoint({lat: pos.lat, lon: pos.lon}, 2, [14, 15]).catch(
+          e => console.warn('Tile download around current location failed:', e),
         );
       }
 
-      // Pan map to current position
-      if (mapReady && mapRef.current && pos.positionMode !== 'UNKNOWN') {
-        mapRef.current.animateToRegion(
-          {
-            latitude: pos.lat,
-            longitude: pos.lon,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          },
-          300,
-        );
-      }
-
-      if (state.destinationReached) {
+      // Arrived alert — show once
+      if (state.destinationReached && !arrivedShown.current) {
+        arrivedShown.current = true;
         Alert.alert('Arrived!', 'You have reached your destination.', [
           {text: 'OK', onPress: onStop},
         ]);
       }
     },
-    [mapReady, onStop],
+    [onStop],
   );
 
-  const initialRegion: Region = {
-    latitude: origin.lat,
-    longitude: origin.lon,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  };
+  // ── service lifecycle ───────────────────────────────────────────────────────
+  useEffect(() => {
+    navigationEngine.loadRoute(route);
+    gpsService.startGPS();
+    sensorService.startSensors();
+    startCoordinator();
 
-  const modeColor: Record<PositionMode, string> = {
-    GPS: '#34a853',
-    DR: '#fbbc04',
-    UNKNOWN: '#ea4335',
-  };
-  const modeLabel: Record<PositionMode, string> = {
-    GPS: 'GPS',
-    DR: 'DEAD RECKONING',
-    UNKNOWN: 'NO SIGNAL',
-  };
+    bleService.startBLE().catch(e =>
+      console.warn('BLE start failed (navigation continues):', e),
+    );
+
+    const unsubscribe = addPositionListener(handlePosition);
+
+    return () => {
+      unsubscribe();
+      stopCoordinator();
+      gpsService.stopGPS();
+      sensorService.stopSensors();
+      bleService.stopBLE();
+      navigationEngine.unloadRoute();
+    };
+    // handlePosition is stable (useCallback with [onStop])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleRecenter = useCallback(() => {
+    if (nav.currentPos) {
+      mapRef.current?.send({
+        type: 'flyTo',
+        lon: nav.currentPos.lon,
+        lat: nav.currentPos.lat,
+        zoom: 15,
+      });
+    }
+  }, [nav.currentPos]);
 
   return (
     <View style={styles.container}>
-      {/* Map */}
-      <MapView
+      {/* Full-screen MapLibre map — OSM tiles, same as demo and embedded web UI */}
+      <MapLibreView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapType="none"
-        provider={undefined}
-        rotateEnabled={false}
-        initialRegion={initialRegion}
-        onMapReady={() => setMapReady(true)}>
+        initialLon={origin.lon}
+        initialLat={origin.lat}
+        initialZoom={14}
+        onReady={handleMapReady}
+      />
 
-        {/*
-          OSM tiles via UrlTile:
-          - tileCachePath tells native MapTileProvider where to cache tiles on disk.
-            Format: {TILE_CACHE_DIR}/{z}/{x}/{y}  (no extension — matches MapTileProvider.java)
-          - When online: fetches from OSM and saves to tileCachePath automatically.
-          - When offline: reads from tileCachePath if previously cached.
-          - maximumZ=19: don't request zoom levels OSM doesn't serve.
-          - flipY=false: OSM uses standard XYZ (not TMS) tile scheme.
-        */}
-        <UrlTile
-          urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          tileCachePath={TILE_CACHE_DIR}
-          maximumZ={19}
-          flipY={false}
-          zIndex={1}
-          tileSize={256}
-        />
-
-        {/* Route polyline */}
-        {polylineCoords.length > 0 && (
-          <Polyline
-            coordinates={polylineCoords}
-            strokeColor="#1a73e8"
-            strokeWidth={5}
-            zIndex={3}
-          />
-        )}
-
-        {/* Origin marker */}
-        <Marker
-          coordinate={{latitude: origin.lat, longitude: origin.lon}}
-          title="Start"
-          pinColor="green"
-          zIndex={4}
-        />
-
-        {/* Destination marker */}
-        <Marker
-          coordinate={{latitude: dest.lat, longitude: dest.lon}}
-          title="Destination"
-          pinColor="red"
-          zIndex={4}
-        />
-
-        {/* Current position — blue pulsing dot */}
-        {nav.currentPos && (
-          <Marker
-            coordinate={{
-              latitude: nav.currentPos.lat,
-              longitude: nav.currentPos.lon,
-            }}
-            title="You are here"
-            anchor={{x: 0.5, y: 0.5}}
-            zIndex={10}>
-            <View style={styles.userDotOuter}>
-              <View
-                style={[
-                  styles.userDotInner,
-                  {backgroundColor: modeColor[nav.navMode]},
-                ]}
-              />
-            </View>
-          </Marker>
-        )}
-      </MapView>
-
-      {/* Recenter button */}
-      {nav.currentPos && (
-        <Pressable
-          style={styles.recenterButton}
-          onPress={() => {
-            if (mapRef.current && nav.currentPos) {
-              mapRef.current.animateToRegion(
-                {
-                  latitude: nav.currentPos.lat,
-                  longitude: nav.currentPos.lon,
-                  latitudeDelta: 0.005,
-                  longitudeDelta: 0.005,
-                },
-                400,
-              );
-            }
-          }}>
-          <Text style={styles.recenterText}>{'\u2316'}</Text>
-        </Pressable>
-      )}
-
-      {/* No-signal warning banner */}
+      {/* No-signal warning (shown above instruction bar) */}
       {nav.navMode === 'UNKNOWN' && (
         <View style={styles.warningBanner}>
           <Text style={styles.warningText}>
-            No sensor data available — check GPS and sensors
+            No sensor data — check GPS and sensors
           </Text>
         </View>
       )}
 
-      {/* Instruction bar */}
+      {/* Off-route warning */}
+      {nav.offRoute && nav.navMode !== 'UNKNOWN' && (
+        <View style={styles.offRouteBanner}>
+          <Text style={styles.warningText}>Off route — recalculating…</Text>
+        </View>
+      )}
+
+      {/* Top instruction bar */}
       <View style={[styles.instructionBar, {paddingTop: insets.top + 8}]}>
         <View style={styles.instructionRow}>
           <View
             style={[
               styles.modeBadge,
-              {backgroundColor: modeColor[nav.navMode]},
+              {backgroundColor: MODE_COLOR[nav.navMode]},
             ]}>
-            <Text style={styles.modeBadgeText}>{modeLabel[nav.navMode]}</Text>
+            <Text style={styles.modeBadgeText}>{MODE_LABEL[nav.navMode]}</Text>
           </View>
           {nav.offRoute && (
             <View style={styles.offRouteBadge}>
@@ -329,6 +277,14 @@ const NavigationScreen: React.FC<Props> = ({
         <Text style={styles.instructionText} numberOfLines={2}>
           {nav.instruction}
         </Text>
+
+        {nav.distanceM > 0 && (
+          <Text style={styles.distanceText}>
+            {nav.distanceM >= 1000
+              ? `${(nav.distanceM / 1000).toFixed(1)} km`
+              : `${nav.distanceM} m`}
+          </Text>
+        )}
 
         {/* Confidence bar */}
         <View style={styles.confBarBg}>
@@ -347,7 +303,14 @@ const NavigationScreen: React.FC<Props> = ({
         </Text>
       </View>
 
-      {/* Stop button */}
+      {/* Recenter button */}
+      {nav.currentPos && (
+        <Pressable style={styles.recenterButton} onPress={handleRecenter}>
+          <Text style={styles.recenterText}>{'\u2316'}</Text>
+        </Pressable>
+      )}
+
+      {/* Bottom stop button */}
       <View style={[styles.bottomPanel, {paddingBottom: insets.bottom + 16}]}>
         <Pressable
           style={({pressed}) => [
@@ -363,7 +326,7 @@ const NavigationScreen: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#000'},
+  container: {flex: 1, backgroundColor: '#e8e0d8'},
 
   warningBanner: {
     position: 'absolute',
@@ -371,6 +334,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#ea4335',
+    padding: 8,
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  offRouteBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#f9a825',
     padding: 8,
     alignItems: 'center',
     zIndex: 20,
@@ -402,30 +375,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  modeBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
+  modeBadgeText: {color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.8},
   offRouteBadge: {
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
     backgroundColor: '#ea4335',
   },
-  offRouteBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  instructionText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 6,
-  },
+  offRouteBadgeText: {color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.8},
+  instructionText: {fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 4},
+  distanceText: {fontSize: 13, color: '#555', marginBottom: 6},
   confBarBg: {
     height: 4,
     backgroundColor: '#e0e0e0',
@@ -435,6 +394,24 @@ const styles = StyleSheet.create({
   },
   confBarFill: {height: 4, borderRadius: 2},
   confLabel: {fontSize: 10, color: '#888'},
+
+  recenterButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 100,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  recenterText: {fontSize: 24, color: '#1a73e8'},
 
   bottomPanel: {
     position: 'absolute',
@@ -454,47 +431,6 @@ const styles = StyleSheet.create({
   },
   stopButtonPressed: {backgroundColor: '#c5221f', transform: [{scale: 0.98}]},
   stopButtonText: {color: '#fff', fontSize: 16, fontWeight: '700'},
-
-  // User position marker
-  userDotOuter: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderWidth: 2,
-    borderColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-  },
-  userDotInner: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
-
-  // Recenter button
-  recenterButton: {
-    position: 'absolute',
-    right: 16,
-    bottom: 100,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  recenterText: {fontSize: 24, color: '#1a73e8'},
 });
 
 export default NavigationScreen;
