@@ -45,7 +45,7 @@ except ImportError:
     sys.exit(1)
 
 SERVER  = "http://localhost:8765"
-SESSION = "ride_mit_pavi_001"
+SESSION = "ride_cyberhub_igi_001"
 
 # ── Full 226-point polyline from KML ─────────────────────────────────────────
 # Every coordinate is [lng, lat] directly from maps_test.kml LineString.
