@@ -2,8 +2,8 @@
  * DemoNavigationScreen
  *
  * Plays back DEMO_STEPS one at a time, advancing every STEP_INTERVAL_MS.
- * Uses a pure React Native coordinate renderer instead of react-native-maps
- * so the demo works without a Google Maps API key or network connection.
+ * Map tiles rendered via MapLibre GL (OSM) — same as embedded/web_ui.
+ * No Google Maps SDK required.
  *
  * Controls:
  *   ▶/⏸  Play / Pause
@@ -11,13 +11,12 @@
  *   Stop  Returns to DemoHomeScreen
  */
 
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   Alert,
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -25,13 +24,13 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   DEMO_STEPS,
   DEMO_ORIGIN,
-  DEMO_DEST,
   FULL_POLYLINE,
   STEP_INTERVAL_MS,
   type NavMode,
   type PositionMode,
-  type LatLon,
 } from './demoRoute';
+import MapLibreView from '../components/MapLibreView';
+import type {MapLibreViewRef} from '../components/MapLibreView';
 
 interface Props {
   onStop: () => void;
@@ -50,119 +49,12 @@ const POS_COLOR: Record<PositionMode, string> = {
   UNKNOWN: '#ea4335',
 };
 
-// ── coordinate-to-pixel scaler ────────────────────────────────────────────────
-
-function buildScaler(
-  points: LatLon[],
-  canvasW: number,
-  canvasH: number,
-  pad: number,
-) {
-  const lats = points.map(p => p.lat);
-  const lons = points.map(p => p.lon);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const rangeW = canvasW - pad * 2;
-  const rangeH = canvasH - pad * 2;
-  return (p: LatLon) => ({
-    x: pad + ((p.lon - minLon) / (maxLon - minLon)) * rangeW,
-    y: pad + ((maxLat - p.lat) / (maxLat - minLat)) * rangeH,
-  });
-}
-
-// ── MiniMap component ─────────────────────────────────────────────────────────
-
-interface MiniMapProps {
-  width: number;
-  height: number;
-  traveledPoints: LatLon[];
-  currentPos: LatLon;
-  posColor: string;
-}
-
-const MiniMap: React.FC<MiniMapProps> = ({
-  width,
-  height,
-  traveledPoints,
-  currentPos,
-  posColor,
-}) => {
-  const scaler = useMemo(
-    () => buildScaler(FULL_POLYLINE, width, height, 24),
-    [width, height],
-  );
-
-  // Full route background — sample every 4th point (~93 dots)
-  const bgDots = useMemo(() => FULL_POLYLINE.filter((_, i) => i % 4 === 0), []);
-  // Traveled portion — sample every 2nd point for denser trail
-  const travelDots = useMemo(
-    () => traveledPoints.filter((_, i) => i % 2 === 0),
-    [traveledPoints],
-  );
-
-  const originPx = scaler(DEMO_ORIGIN);
-  const destPx = scaler(DEMO_DEST);
-  const curPx = scaler(currentPos);
-
-  return (
-    <View style={[styles.miniMap, {width, height}]}>
-      {/* Full route (faint) */}
-      {bgDots.map((p, i) => {
-        const {x, y} = scaler(p);
-        return (
-          <View
-            key={`bg${i}`}
-            style={[styles.bgDot, {left: x - 2, top: y - 2}]}
-          />
-        );
-      })}
-
-      {/* Traveled portion (bright) */}
-      {travelDots.map((p, i) => {
-        const {x, y} = scaler(p);
-        return (
-          <View
-            key={`tr${i}`}
-            style={[styles.travelDot, {left: x - 2.5, top: y - 2.5}]}
-          />
-        );
-      })}
-
-      {/* Origin */}
-      <View
-        style={[
-          styles.endMarker,
-          {backgroundColor: '#34a853', left: originPx.x - 6, top: originPx.y - 6},
-        ]}
-      />
-
-      {/* Destination */}
-      <View
-        style={[
-          styles.endMarker,
-          {backgroundColor: '#ea4335', left: destPx.x - 6, top: destPx.y - 6},
-        ]}
-      />
-
-      {/* Rider (current position) */}
-      <View
-        style={[
-          styles.riderOuter,
-          {left: curPx.x - 11, top: curPx.y - 11},
-        ]}>
-        <View style={[styles.riderInner, {backgroundColor: posColor}]} />
-      </View>
-    </View>
-  );
-};
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+// Full route as [lon, lat] pairs — sent once on map ready
+const FULL_ROUTE_COORDS: [number, number][] = FULL_POLYLINE.map(p => [p.lon, p.lat]);
 
 const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
   const insets = useSafeAreaInsets();
-  const {width, height} = useWindowDimensions();
+  const mapRef = useRef<MapLibreViewRef>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [stepIdx, setStepIdx] = useState(0);
@@ -172,6 +64,46 @@ const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
   const step = DEMO_STEPS[stepIdx];
   const currentPos = step.routePolyline[step.routePolyline.length - 1];
   const isCrash = step.nextInstructionText.includes('CRASH');
+
+  // ── map setup on ready ──────────────────────────────────────────────────────
+
+  const handleMapReady = useCallback(() => {
+    mapRef.current?.send({type: 'setRoute', coords: FULL_ROUTE_COORDS});
+    mapRef.current?.send({
+      type: 'setRider',
+      lon: DEMO_ORIGIN.lon,
+      lat: DEMO_ORIGIN.lat,
+      color: POS_COLOR.GPS,
+    });
+  }, []);
+
+  // ── update map whenever step changes ───────────────────────────────────────
+
+  useEffect(() => {
+    // Update traveled polyline (route up to current step)
+    const traveledCoords: [number, number][] = step.routePolyline.map(
+      p => [p.lon, p.lat],
+    );
+    mapRef.current?.send({type: 'setRoute', coords: traveledCoords});
+
+    // Move rider dot to current position
+    mapRef.current?.send({
+      type: 'setRider',
+      lon: currentPos.lon,
+      lat: currentPos.lat,
+      color: POS_COLOR[step.positionMode],
+    });
+
+    // Pan map to follow rider
+    mapRef.current?.send({
+      type: 'flyTo',
+      lon: currentPos.lon,
+      lat: currentPos.lat,
+      zoom: 14,
+    });
+  }, [stepIdx, step, currentPos]);
+
+  // ── playback timer ──────────────────────────────────────────────────────────
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -191,7 +123,6 @@ const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
     });
   }, [clearTimer]);
 
-  // Auto-advance timer
   useEffect(() => {
     if (playing && !step.destinationReached) {
       timerRef.current = setInterval(advance, STEP_INTERVAL_MS);
@@ -201,7 +132,8 @@ const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
     return clearTimer;
   }, [playing, step.destinationReached, advance, clearTimer]);
 
-  // Show arrived alert once
+  // ── arrived alert ───────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (step.destinationReached && !arrivedShown.current) {
       arrivedShown.current = true;
@@ -214,18 +146,16 @@ const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
     }
   }, [step.destinationReached, onStop, clearTimer]);
 
-  // Map height = screen minus top instruction bar and bottom controls (rough estimate)
-  const mapHeight = height - insets.top - insets.bottom - 180;
-
   return (
     <View style={styles.container}>
-      {/* Mini-map fills the background */}
-      <MiniMap
-        width={width}
-        height={mapHeight + insets.top + 60}
-        traveledPoints={step.routePolyline}
-        currentPos={currentPos}
-        posColor={POS_COLOR[step.positionMode]}
+      {/* Full-screen MapLibre map */}
+      <MapLibreView
+        ref={mapRef}
+        style={StyleSheet.absoluteFillObject}
+        initialLon={DEMO_ORIGIN.lon}
+        initialLat={DEMO_ORIGIN.lat}
+        initialZoom={13}
+        onReady={handleMapReady}
       />
 
       {/* Crash overlay */}
@@ -292,7 +222,6 @@ const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
 
       {/* Bottom controls */}
       <View style={[styles.bottomPanel, {paddingBottom: insets.bottom + 12}]}>
-        {/* Progress bar */}
         <View style={styles.progressBg}>
           <View
             style={[
@@ -326,7 +255,10 @@ const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
             onPress={() => setStepIdx(prev => Math.min(TOTAL - 1, prev + 1))}
             disabled={stepIdx === TOTAL - 1}>
             <Text
-              style={[styles.ctrlText, stepIdx === TOTAL - 1 && styles.ctrlDisabled]}>
+              style={[
+                styles.ctrlText,
+                stepIdx === TOTAL - 1 && styles.ctrlDisabled,
+              ]}>
               {'Next ›'}
             </Text>
           </Pressable>
@@ -346,44 +278,7 @@ const DemoNavigationScreen: React.FC<Props> = ({onStop}) => {
 };
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#0d1b2a'},
-
-  miniMap: {backgroundColor: '#0d1b2a', position: 'relative'},
-  bgDot: {
-    position: 'absolute',
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(26,115,232,0.25)',
-  },
-  travelDot: {
-    position: 'absolute',
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: 'rgba(26,115,232,0.9)',
-  },
-  endMarker: {
-    position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  riderOuter: {
-    position: 'absolute',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderWidth: 2,
-    borderColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-  },
-  riderInner: {width: 12, height: 12, borderRadius: 6},
+  container: {flex: 1, backgroundColor: '#e8e0d8'},
 
   crashBanner: {
     position: 'absolute',
@@ -395,12 +290,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 30,
   },
-  crashText: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 15,
-    letterSpacing: 0.5,
-  },
+  crashText: {color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 0.5},
+
   offRouteBanner: {
     position: 'absolute',
     top: 0,
@@ -436,12 +327,7 @@ const styles = StyleSheet.create({
   badge: {borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3},
   badgeText: {color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.5},
   stepCounter: {marginLeft: 'auto', fontSize: 11, color: '#888'},
-  instructionText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 4,
-  },
+  instructionText: {fontSize: 17, fontWeight: '700', color: '#1a1a1a', marginBottom: 4},
   distanceText: {fontSize: 13, color: '#555', marginBottom: 6},
   confBarBg: {
     height: 4,

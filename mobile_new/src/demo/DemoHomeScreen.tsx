@@ -1,12 +1,11 @@
 /**
  * DemoHomeScreen
  *
- * Shows a coordinate-based route preview (pure React Native, no native map)
- * and a "Start Demo Trip" button.  No GPS, no network, no Google Maps SDK needed
- * — all data is baked in from demoRoute.ts.
+ * Shows the NH-48 route on a MapLibre GL map (OSM tiles, same as embedded web UI)
+ * and a "Start Demo Trip" button.  No Google Maps SDK needed.
  */
 
-import React, {useMemo} from 'react';
+import React, {useRef} from 'react';
 import {
   Pressable,
   ScrollView,
@@ -22,85 +21,37 @@ import {
   FULL_POLYLINE,
   DEMO_STEPS,
 } from './demoRoute';
-import type {LatLon} from './demoRoute';
+import MapLibreView from '../components/MapLibreView';
+import type {MapLibreViewRef} from '../components/MapLibreView';
 
 interface Props {
   onStart: () => void;
   onBack: () => void;
 }
 
-// ── coordinate-to-pixel scaler ────────────────────────────────────────────────
+// Midpoint of the route for initial map center
+const CENTER_LON = (DEMO_ORIGIN.lon + DEMO_DEST.lon) / 2;
+const CENTER_LAT = (DEMO_ORIGIN.lat + DEMO_DEST.lat) / 2;
 
-function buildScaler(
-  points: LatLon[],
-  canvasW: number,
-  canvasH: number,
-  pad: number,
-) {
-  const lats = points.map(p => p.lat);
-  const lons = points.map(p => p.lon);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const rangeW = canvasW - pad * 2;
-  const rangeH = canvasH - pad * 2;
-  return (p: LatLon) => ({
-    x: pad + ((p.lon - minLon) / (maxLon - minLon)) * rangeW,
-    // latitude increases upward on map, y increases downward on screen
-    y: pad + ((maxLat - p.lat) / (maxLat - minLat)) * rangeH,
-  });
-}
-
-// ── Route mini-map (pure React Native Views, no native map) ──────────────────
-
-interface MiniMapProps {
-  width: number;
-  height: number;
-}
-
-const RouteMiniMap: React.FC<MiniMapProps> = ({width, height}) => {
-  const scaler = useMemo(
-    () => buildScaler(FULL_POLYLINE, width, height, 18),
-    [width, height],
-  );
-  // Sample every 3rd point for performance (~124 dots)
-  const routeDots = useMemo(
-    () => FULL_POLYLINE.filter((_, i) => i % 3 === 0),
-    [],
-  );
-  const originPx = scaler(DEMO_ORIGIN);
-  const destPx = scaler(DEMO_DEST);
-
-  return (
-    <View style={[styles.miniMap, {width, height}]}>
-      {routeDots.map((p, i) => {
-        const {x, y} = scaler(p);
-        return (
-          <View key={i} style={[styles.routeDot, {left: x - 2, top: y - 2}]} />
-        );
-      })}
-      <View
-        style={[styles.marker, styles.markerOrigin, {left: originPx.x - 7, top: originPx.y - 7}]}
-      />
-      <View
-        style={[styles.marker, styles.markerDest, {left: destPx.x - 7, top: destPx.y - 7}]}
-      />
-      <Text style={[styles.mapLabel, {left: originPx.x + 10, top: originPx.y - 8}]}>
-        Start
-      </Text>
-      <Text style={[styles.mapLabel, {left: destPx.x + 10, top: destPx.y - 8}]}>
-        IGI T3
-      </Text>
-    </View>
-  );
-};
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+// Pre-build [lon, lat] pairs once (MapLibre uses lon, lat order)
+const ROUTE_COORDS: [number, number][] = FULL_POLYLINE.map(p => [p.lon, p.lat]);
 
 const DemoHomeScreen: React.FC<Props> = ({onStart, onBack}) => {
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
+  const mapRef = useRef<MapLibreViewRef>(null);
+
+  const handleMapReady = () => {
+    // Draw the full route polyline on the map
+    mapRef.current?.send({type: 'setRoute', coords: ROUTE_COORDS});
+    // Place origin marker
+    mapRef.current?.send({
+      type: 'setRider',
+      lon: DEMO_ORIGIN.lon,
+      lat: DEMO_ORIGIN.lat,
+      color: '#34a853',
+    });
+  };
 
   return (
     <ScrollView
@@ -120,14 +71,21 @@ const DemoHomeScreen: React.FC<Props> = ({onStart, onBack}) => {
         <View style={styles.backBtn} />
       </View>
 
-      {/* Route card with mini-map */}
+      {/* Route card with MapLibre map */}
       <View style={styles.card}>
         <Text style={styles.routeTitle}>DLF CyberHub → IGI Airport T3</Text>
         <Text style={styles.routeMeta}>
           NH-48 Delhi-Gurgaon Expressway · ~10.9 km · {DEMO_STEPS.length} steps
         </Text>
-        <View style={styles.miniMapWrapper}>
-          <RouteMiniMap width={width - 64} height={220} />
+        <View style={[styles.mapWrapper, {width: width - 64}]}>
+          <MapLibreView
+            ref={mapRef}
+            style={styles.map}
+            initialLon={CENTER_LON}
+            initialLat={CENTER_LAT}
+            initialZoom={11}
+            onReady={handleMapReady}
+          />
         </View>
         <View style={styles.endpointRow}>
           <View style={[styles.endpointChip, styles.originChip]}>
@@ -163,7 +121,7 @@ const DemoHomeScreen: React.FC<Props> = ({onStart, onBack}) => {
       <View style={styles.infoBox}>
         <Text style={styles.infoText}>
           {'Simulates: GPS → VISUAL → DEGRADED → UNKNOWN → CRASH alert → OFF ROUTE → ARRIVED\n'}
-          {'No GPS, no network, no permissions required.'}
+          {'No GPS or permissions required.'}
         </Text>
       </View>
 
@@ -207,31 +165,8 @@ const styles = StyleSheet.create({
   routeTitle: {fontSize: 16, fontWeight: '800', color: '#1a1a1a', marginBottom: 4},
   routeMeta: {fontSize: 12, color: '#666', marginBottom: 14},
 
-  miniMapWrapper: {borderRadius: 10, overflow: 'hidden', marginBottom: 14},
-  miniMap: {backgroundColor: '#0d1b2a', position: 'relative'},
-  routeDot: {
-    position: 'absolute',
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(26,115,232,0.65)',
-  },
-  marker: {
-    position: 'absolute',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  markerOrigin: {backgroundColor: '#34a853'},
-  markerDest: {backgroundColor: '#ea4335'},
-  mapLabel: {
-    position: 'absolute',
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.75)',
-    fontWeight: '700',
-  },
+  mapWrapper: {height: 220, borderRadius: 10, overflow: 'hidden', marginBottom: 14},
+  map: {flex: 1},
 
   endpointRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   endpointChip: {flex: 1, borderRadius: 10, padding: 10},
