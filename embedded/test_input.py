@@ -4,8 +4,8 @@ test_input.py
 Simulates Sanskruti's navigation brain sending UIStateMessages to the
 embedded module server.
 
-Route:  DLF CyberHub, Gurgaon → IGI Airport T3 Metro Station, Delhi
-Source: Google My Maps KML export (maps_test.kml) — 372 real GPS points
+Route:  MIT WPU → Pavillion Mall
+Source: Google My Maps KML export (maps_test.kml) — 226 real GPS points
         parsed precisely and segmented into 21 navigation waypoints.
 
 All coordinates are the EXACT road-surface points from your KML file.
@@ -45,13 +45,12 @@ except ImportError:
     sys.exit(1)
 
 SERVER  = "http://localhost:8765"
-SESSION = "ride_cyberhub_igi_001"
+SESSION = "ride_mit_pavi_001"
 
-# ── Full 372-point polyline from KML ─────────────────────────────────────────
-# Every coordinate is [lat, lng] directly from maps_test.kml LineString.
+# ── Full 226-point polyline from KML ─────────────────────────────────────────
+# Every coordinate is [lng, lat] directly from maps_test.kml LineString.
 # This is the complete road geometry — the route_polyline in each step
 # is a slice of this list up to the current rider position.
-
 _FULL = [
 [28.49541,77.08937],[28.49521,77.08978],[28.49519,77.08986],[28.4951,77.08984],[28.495,77.08979],
 [28.49492,77.08976],[28.49455,77.08957],[28.49438,77.08949],[28.49416,77.08937],[28.494,77.08928],
@@ -129,10 +128,238 @@ _FULL = [
 [28.55502,77.08534],[28.55507,77.08531],[28.55517,77.08524],[28.55521,77.08522],[28.55523,77.0852],
 [28.55526,77.08518],[28.55543,77.08507],
 ]
+# _FULL = [
+# [73.81511,18.51777],
+# [73.81531,18.51778],
+# [73.81542,18.51778],
+# [73.81534,18.51716],
+# [73.81536,18.51672],
+# [73.81536,18.51649],
+# [73.81538,18.51609],
+# [73.81537,18.51582],
+# [73.81537,18.51576],
+# [73.81535,18.51564],
+# [73.81533,18.51553],
+# [73.81531,18.5155],
+# [73.8153,18.51548],
+# [73.8153,18.51546],
+# [73.8153,18.51544],
+# [73.8153,18.51526],
+# [73.81532,18.51503],
+# [73.81532,18.51477],
+# [73.81534,18.51445],
+# [73.81535,18.51409],
+# [73.81543,18.51402],
+# [73.81544,18.51389],
+# [73.81548,18.51359],
+# [73.8155,18.51328],
+# [73.8155,18.51322],
+# [73.81553,18.51287],
+# [73.8163,18.5127],
+# [73.81707,18.51259],
+# [73.81752,18.51261],
+# [73.81756,18.51229],
+# [73.8176,18.51194],
+# [73.81764,18.51162],
+# [73.81764,18.51134],
+# [73.81768,18.51085],
+# [73.81803,18.51083],
+# [73.81823,18.51085],
+# [73.81837,18.51087],
+# [73.81838,18.51087],
+# [73.81856,18.51091],
+# [73.81892,18.51102],
+# [73.81908,18.51105],
+# [73.81926,18.51106],
+# [73.81941,18.51104],
+# [73.81965,18.51093],
+# [73.8201,18.51064],
+# [73.82019,18.51059],
+# [73.8204,18.51048],
+# [73.82045,18.51045],
+# [73.82064,18.51033],
+# [73.82082,18.51022],
+# [73.82106,18.51004],
+# [73.82125,18.5099],
+# [73.82157,18.50958],
+# [73.82196,18.50917],
+# [73.82244,18.50864],
+# [73.82274,18.50828],
+# [73.82314,18.5078],
+# [73.82394,18.50691],
+# [73.82409,18.50672],
+# [73.82421,18.50657],
+# [73.82422,18.50656],
+# [73.82426,18.50651],
+# [73.82435,18.50642],
+# [73.82445,18.50634],
+# [73.82446,18.50633],
+# [73.82448,18.50632],
+# [73.82458,18.50625],
+# [73.8246,18.50624],
+# [73.82463,18.50622],
+# [73.82467,18.5062],
+# [73.82479,18.50615],
+# [73.82481,18.50615],
+# [73.82498,18.50609],
+# [73.82513,18.50605],
+# [73.82525,18.50603],
+# [73.82534,18.50602],
+# [73.82546,18.50602],
+# [73.82551,18.50602],
+# [73.82555,18.50603],
+# [73.82561,18.50604],
+# [73.82579,18.50609],
+# [73.8258,18.50609],
+# [73.82628,18.50626],
+# [73.82685,18.50652],
+# [73.82702,18.5066],
+# [73.82768,18.5069],
+# [73.82778,18.50695],
+# [73.82796,18.50704],
+# [73.82793,18.5071],
+# [73.82792,18.50712],
+# [73.82792,18.50717],
+# [73.82794,18.5072],
+# [73.82796,18.50723],
+# [73.82797,18.50724],
+# [73.828,18.50729],
+# [73.82815,18.50745],
+# [73.82823,18.50758],
+# [73.82825,18.50761],
+# [73.82835,18.50774],
+# [73.8284,18.50784],
+# [73.82844,18.50791],
+# [73.82849,18.50802],
+# [73.82852,18.50812],
+# [73.82853,18.50814],
+# [73.82857,18.50828],
+# [73.82859,18.50846],
+# [73.82861,18.5086],
+# [73.82863,18.50882],
+# [73.82863,18.50888],
+# [73.82862,18.50893],
+# [73.8286,18.50905],
+# [73.82856,18.50921],
+# [73.82855,18.50935],
+# [73.82854,18.50956],
+# [73.82856,18.50971],
+# [73.8286,18.50982],
+# [73.82863,18.50988],
+# [73.82867,18.50993],
+# [73.82871,18.50996],
+# [73.82874,18.50999],
+# [73.82879,18.51002],
+# [73.82892,18.51009],
+# [73.82898,18.51014],
+# [73.829,18.51016],
+# [73.82905,18.51023],
+# [73.82906,18.51026],
+# [73.82912,18.51036],
+# [73.82916,18.51048],
+# [73.82957,18.51067],
+# [73.82942,18.51104],
+# [73.82916,18.51171],
+# [73.82902,18.51214],
+# [73.8289,18.51253],
+# [73.82887,18.51264],
+# [73.82882,18.51294],
+# [73.82876,18.51336],
+# [73.82872,18.51365],
+# [73.82871,18.514],
+# [73.82872,18.51425],
+# [73.8287,18.51457],
+# [73.8287,18.51468],
+# [73.82876,18.51496],
+# [73.82881,18.51514],
+# [73.82886,18.51541],
+# [73.82903,18.51593],
+# [73.82923,18.51642],
+# [73.82928,18.51657],
+# [73.82933,18.51671],
+# [73.82943,18.51698],
+# [73.82963,18.51743],
+# [73.82983,18.5178],
+# [73.82992,18.51797],
+# [73.82998,18.5181],
+# [73.83003,18.51818],
+# [73.83005,18.51823],
+# [73.83014,18.51841],
+# [73.83019,18.51852],
+# [73.83022,18.5186],
+# [73.83025,18.51865],
+# [73.83027,18.5187],
+# [73.8303,18.51879],
+# [73.83032,18.51887],
+# [73.83033,18.51895],
+# [73.83035,18.51908],
+# [73.83042,18.51972],
+# [73.83044,18.51994],
+# [73.83047,18.52015],
+# [73.83046,18.52015],
+# [73.83046,18.52016],
+# [73.83045,18.52016],
+# [73.83045,18.52017],
+# [73.83044,18.52017],
+# [73.83044,18.52018],
+# [73.83044,18.52019],
+# [73.83028,18.52024],
+# [73.83001,18.52034],
+# [73.82994,18.52036],
+# [73.8296,18.52047],
+# [73.8294,18.52055],
+# [73.82925,18.52066],
+# [73.82921,18.52069],
+# [73.82917,18.52072],
+# [73.8291,18.5208],
+# [73.82906,18.52086],
+# [73.82904,18.52089],
+# [73.82902,18.52093],
+# [73.829,18.52098],
+# [73.829,18.521],
+# [73.82899,18.52107],
+# [73.829,18.52116],
+# [73.82901,18.52127],
+# [73.82906,18.5215],
+# [73.82907,18.52157],
+# [73.82935,18.52266],
+# [73.82942,18.52289],
+# [73.82948,18.52317],
+# [73.82949,18.52327],
+# [73.82951,18.52339],
+# [73.82952,18.52351],
+# [73.82953,18.52368],
+# [73.82956,18.52421],
+# [73.82957,18.52436],
+# [73.82959,18.52465],
+# [73.82961,18.52501],
+# [73.82961,18.52512],
+# [73.82962,18.52521],
+# [73.82964,18.52541],
+# [73.82966,18.52577],
+# [73.82968,18.52619],
+# [73.82969,18.52627],
+# [73.82969,18.52643],
+# [73.82971,18.52677],
+# [73.82977,18.52737],
+# [73.82979,18.52755],
+# [73.82979,18.52762],
+# [73.8298,18.52781],
+# [73.82979,18.52794],
+# [73.82983,18.52898],
+# [73.8299,18.53021],
+# [73.82992,18.53044],
+# [73.82996,18.53163],
+# [73.83002,18.53292],
+# [73.83002,18.53307],
+# [73.83003,18.53309],
+# [73.83003,18.5331],
+# [73.83005,18.53362],
+# ]
 
-# KML waypoint indices for each step (computed from bearing analysis of all 372 points)
+# KML waypoint indices for each step (computed from bearing analysis of all 226 points)
 # Each step's polyline = _FULL[:step_kml_idx+1] — the trail grows as rider moves
-_IDX = [0, 6, 34, 40, 75, 85, 105, 130, 150, 165, 185, 200, 215, 224, 245, 270, 295, 316, 330, 352, 371]
+_IDX = [0, 11, 22, 33, 45, 56, 67, 78, 90, 101, 112, 123, 135, 146, 157, 168, 180, 191, 202, 213, 225]
 
 def poly(step_num):
     """Returns the route_polyline up to this step — exact KML coordinates."""
@@ -142,8 +369,10 @@ def dist_remaining(step_num):
     import math
     def hav(a,b):
         R,p = 6371000, math.pi/180
-        return 2*R*math.asin(math.sqrt(math.sin((b[0]-a[0])*p/2)**2 +
-               math.cos(a[0]*p)*math.cos(b[0]*p)*math.sin((b[1]-a[1])*p/2)**2))
+        lat1, lon1 = a[1], a[0]
+        lat2, lon2 = b[1], b[0]
+        return 2*R*math.asin(math.sqrt(math.sin((lat2-lat1)*p/2)**2 +
+               math.cos(lat1*p)*math.cos(lat2*p)*math.sin((lon2-lon1)*p/2)**2))
     total = sum(hav(_FULL[i], _FULL[i+1]) for i in range(_IDX[step_num], len(_FULL)-1))
     return round(total)
 
@@ -151,7 +380,7 @@ def dist_remaining(step_num):
 # ── Route steps — every field from UIStateMessage spec (section 3) ────────────
 ROUTE = [
 
-    # ── 0. ONLINE + GPS — start at DLF CyberHub gate ─────────────────────────
+    # ── 0. ONLINE + GPS — start at MIT WPU ─────────────────────────
     # KML coord idx 0: (28.49541, 77.08937)
     {
         "session_id": SESSION, "nav_mode": "ONLINE", "position_mode": "GPS",
@@ -346,7 +575,7 @@ ROUTE = [
     # KML coord idx 316: (28.5539, 77.09344) — SLIGHT_LEFT curve near airport
     {
         "session_id": SESSION, "nav_mode": "ONLINE", "position_mode": "GPS",
-        "next_instruction_text": "Keep slight left — rerouted to IGI T3",
+        "next_instruction_text": "Keep slight left — rerouted to Pavillion Mall",
         "distance_to_next_m": 613, "confidence": 0.96,
         "off_route_flag": False, "destination_reached_flag": False,
         "active_step_index": 17,
@@ -369,7 +598,7 @@ ROUTE = [
     # KML coord idx 352: (28.55399, 77.08608) — SLIGHT_RIGHT, airport road
     {
         "session_id": SESSION, "nav_mode": "ONLINE", "position_mode": "GPS",
-        "next_instruction_text": "Keep slight right — IGI T3 Metro Station in 400 m",
+        "next_instruction_text": "Keep slight right — Pavillion Mall in 400 m",
         "distance_to_next_m": 400, "confidence": 0.98,
         "off_route_flag": False, "destination_reached_flag": False,
         "active_step_index": 19,
@@ -378,7 +607,7 @@ ROUTE = [
 
     # ── 20. ONLINE + GPS — ARRIVED ────────────────────────────────────────────
     # KML coord idx 371 (last): (28.55543, 77.08507)
-    # destination = IGI Airport T3 Metro Station per KML Placemark
+    # destination = Pavillion Mall per KML Placemark
     {
         "session_id": SESSION, "nav_mode": "ONLINE", "position_mode": "GPS",
         "next_instruction_text": "You have arrived at IGI Airport T3 Metro Station",
@@ -390,7 +619,7 @@ ROUTE = [
 ]
 
 NOTES = [
-    "ONLINE  + GPS     start: DLF CyberHub gate",
+    "ONLINE  + GPS     start: MIT WPU",
     "ONLINE  + GPS     SLIGHT_RIGHT onto NH-48 slip road",
     "ONLINE  + GPS     RIGHT onto NH-48 main carriageway",
     "ONLINE  + GPS     STRAIGHT on NH-48 northbound",
@@ -410,7 +639,7 @@ NOTES = [
     "ONLINE  + GPS     rerouted, SLIGHT_LEFT near airport",
     "ONLINE  + GPS     CRASH DETECTED — SOS overlay",
     "ONLINE  + GPS     SLIGHT_RIGHT — final approach T3",
-    "ONLINE  + GPS     ARRIVED at IGI T3 Metro Station",
+    "ONLINE  + GPS     ARRIVED at Pavillion Mall",
 ]
 
 
@@ -443,7 +672,7 @@ def send_ui_state(payload):
 if __name__ == "__main__":
     print("\nSmartHelmet — KML Route Test Input")
     print("Source:  maps_test.kml (Google My Maps export)")
-    print("Route:   DLF CyberHub → IGI Airport T3 Metro Station")
+    print("Route:   MIT WPU → Pavillion Mall")
     print("Points:  372 exact KML GPS coordinates → 21 navigation steps")
     print("Dist:    10.91 km on NH-48 Delhi-Gurgaon Expressway\n")
 
@@ -467,7 +696,7 @@ if __name__ == "__main__":
     n = connected_clients()
     print(f"\nBrowser connected ({n} client). Streaming {len(ROUTE)} steps at 2.5 s\n")
     print(f"  {'#':>2}  {'Nav':>10}  {'Pos':>8}  {'TurnClass':>13}  "
-          f"{'Lat':>10}  {'Lng':>10}  Note")
+          f"{'Lng':>10}  {'Lat':>10}  Note")
     print("  " + "─" * 90)
 
     for i, step in enumerate(ROUTE):
@@ -500,3 +729,4 @@ if __name__ == "__main__":
     print("  NavMode pill: ONLINE(green)/OFFLINE(amber)/DEGRADED(red)")
     print("  GPS badge: GPS(blue)/VISUAL-CV(purple)/NO SIGNAL(red)")
     print("  Turn arrows: ↑ STRAIGHT  → RIGHT  ← LEFT  ↩ U-TURN")
+
