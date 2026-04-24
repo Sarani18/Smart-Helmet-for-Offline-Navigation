@@ -43,6 +43,7 @@ VIDEO_SOURCE = "sample_drive.mp4" # Using sample video for testing
 class CVState:
     running: bool = False
     session_id: str = ""
+    latest_detection: str = "AWAITING SENSOR PINGS..."
     # Model cache
     device = None
     lraspp_model = None
@@ -116,6 +117,11 @@ async def receive_nav_hint(hint: NavHintMessage):
     logger.info(f"Received Nav Hint: Expected {hint.expected_next_turn} in {hint.distance_to_next_turn_m}m")
     return {"status": "accepted"}
 
+@app.get("/api/localization/latest")
+async def get_latest():
+    """Return the latest detection string for the UI console."""
+    return {"latest": state.latest_detection}
+
 # --- Background Task: Video Processing Loop ---
 async def cv_inference_loop():
     """
@@ -179,7 +185,9 @@ async def cv_inference_loop():
 
                 # 1. Emit TURN Event if it changed significantly
                 if current_turn != "STRAIGHT" and current_turn != last_emitted_turn and frames_since_event > 5:
-                    logger.info(f"🛣️ Detected Turn: {current_turn} ({confidence_scale*100:.0f}%)")
+                    msg = f"🛣️ Detected Turn: {current_turn} ({confidence_scale*100:.0f}%)"
+                    logger.info(msg)
+                    state.latest_detection = msg
                     payload = {
                         "session_id": state.session_id,
                         "event_id": f"evt_cv_{uuid.uuid4().hex[:8]}",
@@ -197,7 +205,9 @@ async def cv_inference_loop():
 
                 # 2. Emit LANDMARK (Junction) Event
                 if current_junction in ["t_junction", "y_junction", "crossroad"] and current_junction != last_emitted_junction and frames_since_event > 5:
-                    logger.info(f"⚠️ Detected Junction: {current_junction} ({confidence_scale*100:.0f}%)")
+                    msg = f"⚠️ Detected Junction: {current_junction} ({confidence_scale*100:.0f}%)"
+                    logger.info(msg)
+                    state.latest_detection = msg
                     payload = {
                         "session_id": state.session_id,
                         "event_id": f"evt_cv_{uuid.uuid4().hex[:8]}",
