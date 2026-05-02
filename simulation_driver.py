@@ -16,7 +16,7 @@ def calculate_heading(p1, p2):
     return (math.degrees(brng) + 360) % 360
 
 def main():
-    session_id = "national_finals_google_demo"
+    session_id = "NATIONAL_FINALS_2026"
     server_url = "http://localhost:8000"
     
     print("🚀 Connecting to Navigation Server (Secure)...")

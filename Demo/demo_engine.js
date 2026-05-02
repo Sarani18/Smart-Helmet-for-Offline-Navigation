@@ -46,12 +46,6 @@ function animateTick(now) {
     const icon = riderMarker.getIcon();
     icon.rotation = heading;
     riderMarker.setIcon(icon);
-    map.panTo(pos);
-
-    if (panorama) {
-        panorama.setPosition(pos);
-        panorama.setPov({ heading: heading, pitch: 0 });
-    }
     requestAnimationFrame(animateTick);
 }
 
@@ -159,6 +153,13 @@ function render(ui) {
     const lat = ui.current_position[0];
     const lng = ui.current_position[1];
     const heading = ui.heading || 0;
+    const pos = { lat, lng };
+
+    map.panTo(pos);
+    if (panorama) {
+        panorama.setPosition(pos);
+        panorama.setPov({ heading: heading, pitch: 0 });
+    }
 
     // A. Smooth animation — set new tween target
     const currentPos = riderMarker ? riderMarker.getPosition() : null;
