@@ -168,8 +168,7 @@ class NavigationAPIService:
             if self._current_pos:
                 # Simpler approximation for drift: 2% of distance
                 # In real DR this comes from the IMU integration variance
-                self._uncertainty_m += 0.5 # Constant drift per "ping" for sim
-                
+                self._uncertainty_m = min(self._uncertainty_m + 0.5, 50.0) # Constant drift per "ping" for sim, capped at 50m
             self._current_pos = (float(lat), float(lon))
             self._current_heading = float(heading)
             
