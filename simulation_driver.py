@@ -15,17 +15,23 @@ def calculate_heading(p1, p2):
     brng = math.atan2(y, x)
     return (math.degrees(brng) + 360) % 360
 
+def calculate_distance(p1, p2):
+    R = 6371000
+    phi1, phi2 = math.radians(p1[0]), math.radians(p2[0])
+    dphi = math.radians(p2[0] - p1[0])
+    dlam = math.radians(p2[1] - p1[1])
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlam/2)**2
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
 def main():
     session_id = "NATIONAL_FINALS_2026"
     server_url = "http://localhost:8000"
     
     print("🚀 Connecting to Navigation Server (Secure)...")
     
-    # Disable SSL warnings for self-signed certificates in dev
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     
-    # 1. Fetch current UI state to get the route polyline
     try:
         res = requests.post(f"{server_url}/api/navigation/ui/state", json={
             "session_id": session_id,
@@ -39,18 +45,18 @@ def main():
             return
             
         print(f"✅ Route loaded with {len(polyline)} points.")
-        print("🚦 Starting Real-Time Simulation...")
+        print("🚦 Starting Real-Time Simulation at 40 km/h...")
         
-        # 2. Iterate through points and send as DR events
         for i in range(len(polyline) - 1):
             p1 = polyline[i]
             p2 = polyline[i+1]
-            
-            # Calculate heading for the segment
             heading = calculate_heading(p1, p2)
+            dist = calculate_distance(p1, p2)
             
-            # Sub-divide segment for smooth movement — 30 steps at 80ms = ~2.4s per segment
-            steps = 30
+            # Constant speed: 12 m/s (approx 40 km/h)
+            # Update interval: 80ms (0.08s) -> distance per step = 12 * 0.08 = 0.96m
+            steps = max(1, int(dist / 0.96))
+            
             for s in range(steps):
                 t = s / steps
                 lat = p1[0] + (p2[0] - p1[0]) * t

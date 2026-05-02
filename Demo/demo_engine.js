@@ -175,7 +175,7 @@ function render(ui) {
     if (isGPSFailed) {
         // Accumulate 'Fake' drift for visual impact (0.5m per second)
         if (!window.simDrift) window.simDrift = 20.0;
-        window.simDrift += 0.5; 
+        window.simDrift = Math.min(window.simDrift + 0.5, 25.0); 
         drift += window.simDrift;
     } else {
         window.simDrift = 0; // Reset
