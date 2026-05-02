@@ -19,7 +19,7 @@ let mapInitialized = false;
 let animFrom = null;      // {lat, lng, heading} — where we started this tween
 let animTo   = null;      // {lat, lng, heading} — where we are heading
 let animStart = 0;        // timestamp when tween started
-const ANIM_DURATION = 280; // ms — slightly less than poll rate for seamless chaining
+const ANIM_DURATION = 150; // ms — slightly less than poll rate for seamless chaining
 
 function lerpAngle(a, b, t) {
     // Shortest-path angle interpolation (handles 359→1° wrap)
@@ -36,7 +36,8 @@ function animateTick(now) {
         requestAnimationFrame(animateTick);
         return;
     }
-    const t = easeInOut(Math.min((now - animStart) / ANIM_DURATION, 1));
+    // Use linear interpolation for continuous movement between polls (no stutter)
+    const t = Math.min((now - animStart) / CONFIG.POLL_RATE, 1);
     const lat = lerp(animFrom.lat, animTo.lat, t);
     const lng = lerp(animFrom.lng, animTo.lng, t);
     const heading = lerpAngle(animFrom.heading, animTo.heading, t);
@@ -198,14 +199,11 @@ function render(ui) {
 
     // C. Navigation HUD
     if (ui.next_instruction_text) {
-        document.getElementById('inst-text').innerText = ui.next_instruction_text;
+        document.getElementById('inst-text').innerText = ui.next_instruction_text.toUpperCase();
     }
     
-    if (ui.current_position && ui.route_polyline && ui.route_polyline.length > 0) {
-        const p1 = new google.maps.LatLng(ui.current_position[0], ui.current_position[1]);
-        const p2 = new google.maps.LatLng(ui.route_polyline[0][0], ui.route_polyline[0][1]);
-        const dist = google.maps.geometry.spherical.computeDistanceBetween(p1, p2);
-        document.getElementById('inst-distance').innerText = Math.round(dist) + " m";
+    if (ui.distance_to_next_m !== undefined) {
+        document.getElementById('inst-distance').innerText = Math.round(ui.distance_to_next_m) + " m";
     }
 
     // D. Speedometer Logic

@@ -17,16 +17,13 @@
         <div class="header-left">
             <div class="logo-circle neon-pulse"></div>
             <div class="title-block">
-                <h1>SMART HELMET <span class="version">ELITE</span></h1>
-                <p class="subtitle">SYSTEM STATUS: <span id="mode-text">AUTO-FUSION ACTIVE</span></p>
+                <h1>SMART HELMET <span class="version">NAVIGATION</span></h1>
+                <p class="subtitle">SYSTEM STATUS: <span id="mode-text">ONLINE</span></p>
             </div>
         </div>
         <div class="header-right">
             <div id="gps-status" class="status-chip gps-active">
                 <span class="dot pulse"></span> <span id="gps-text">GPS: CONNECTED</span>
-            </div>
-            <div class="session-info">
-                <label>SESSION:</label> <span id="session-id">NATIONAL_FINALS_2026</span>
             </div>
         </div>
     </header>
@@ -123,7 +120,6 @@
         <div class="control-cluster">
             <button class="action-btn primary" onclick="startTrip()">START NAVIGATION</button>
             <button class="action-btn danger pulse-danger" id="btn-kill-gps" onclick="toggleGPSFailure()">KILL GPS SIGNAL</button>
-            <button class="action-btn secondary" onclick="toggleDiag()">DIAGNOSTICS</button>
         </div>
         <div class="telemetry-bar mono">
             <span>UPTIME: <span id="uptime">0:00</span></span>

@@ -45,7 +45,7 @@ def main():
             return
             
         print(f"✅ Route loaded with {len(polyline)} points.")
-        print("🚦 Starting Real-Time Simulation at 40 km/h...")
+        print("🚦 Starting Real-Time Simulation at 900 km/h...")
         
         for i in range(len(polyline) - 1):
             p1 = polyline[i]
@@ -53,9 +53,9 @@ def main():
             heading = calculate_heading(p1, p2)
             dist = calculate_distance(p1, p2)
             
-            # Constant speed: 12 m/s (approx 40 km/h)
-            # Update interval: 80ms (0.08s) -> distance per step = 12 * 0.08 = 0.96m
-            steps = max(1, int(dist / 0.96))
+            # Constant speed: 250 m/s (approx 900 km/h)
+            # Update interval: 50ms (0.05s) -> distance per step = 250 * 0.05 = 12.5m
+            steps = max(1, int(dist / 12.5))
             
             for s in range(steps):
                 t = s / steps
@@ -75,7 +75,7 @@ def main():
                               json=payload, verify=False)
                 
                 print(f"📍 Pos: {lat:.5f}, {lon:.5f} | Heading: {heading:.1f}°", end="\r")
-                time.sleep(0.08)  # 80ms = ~12.5 updates/sec — smooth like Google Maps
+                time.sleep(0.05)  # 80ms = ~12.5 updates/sec — smooth like Google Maps
                 
         print("\n🏁 Journey Complete! Simplified Demo Path finished.")
         
