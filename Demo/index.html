@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>National Finals | Smart Helmet v2.0</title>
+    <!-- Premium Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="demo_styles.css">
+    <!-- Google Maps API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDG5leEsNLQ_1ZjQSBqEtWo2DQsLxZHtlY&libraries=geometry&callback=init" async defer></script>
+</head>
+<body class="elite-theme">
+
+    <!-- TOP CONTROL BAR -->
+    <header class="main-header glass">
+        <div class="header-left">
+            <div class="logo-circle neon-pulse"></div>
+            <div class="title-block">
+                <h1>SMART HELMET <span class="version">ELITE</span></h1>
+                <p class="subtitle">SYSTEM STATUS: <span id="mode-text">AUTO-FUSION ACTIVE</span></p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div id="gps-status" class="status-chip gps-active">
+                <span class="dot pulse"></span> <span id="gps-text">GPS: CONNECTED</span>
+            </div>
+            <div class="session-info">
+                <label>SESSION:</label> <span id="session-id">NATIONAL_FINALS_2026</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENT GRID -->
+    <main class="tactical-grid">
+        
+        <!-- COLUMN 1: VITALS -->
+        <aside class="col-vitals">
+            <div class="tactical-card glass">
+                <div class="card-header">SPATIAL TELEMETRY</div>
+                <div class="card-body">
+                    <canvas id="imu-chart" width="280" height="100"></canvas>
+                    <div class="data-group">
+                        <div class="data-point">
+                            <label>LATENCY</label>
+                            <span id="latency-val" class="mono">-- ms</span>
+                        </div>
+                        <div class="data-point">
+                            <label>HEADING</label>
+                            <span id="heading-val" class="mono">0.0°</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tactical-card glass">
+                <div class="card-header">LOCALIZATION DRIFT</div>
+                <div class="card-body">
+                    <div class="drift-row">
+                        <span class="drift-label">SPATIAL UNCERTAINTY</span>
+                        <span id="drift-val" class="drift-numeric mono">0.0m</span>
+                    </div>
+                    <div class="drift-track-container">
+                        <div id="drift-bar" class="drift-track-fill" style="width: 0%"></div>
+                    </div>
+                    <p class="dr-status">MODE: <span id="pos-mode">GPS_CONVERGED</span></p>
+                </div>
+            </div>
+
+            <div class="tactical-card glass speed-card">
+                <div class="speed-container">
+                    <span id="speed-val" class="mono">--</span>
+                    <label>KM/H</label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- COLUMN 2: PRIMARY NAVIGATION -->
+        <section class="col-map">
+            <div class="map-perspective-wrapper">
+                <div id="map"></div>
+                
+                <!-- HUD OVERLAYS -->
+                <div class="hud-instruction glass">
+                    <div class="hud-dir-icon" id="dir-icon">⬆️</div>
+                    <div class="hud-details">
+                        <div id="inst-distance" class="mono">-- m</div>
+                        <div id="inst-text">AWAITING MISSION START</div>
+                    </div>
+                </div>
+
+                <div id="vision-alert" class="mission-alert glass">
+                    <div class="alert-content">AI CV STATE CORRECTION APPLIED</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- COLUMN 3: INTELLIGENCE -->
+        <aside class="col-intel">
+            <div class="tactical-card glass intel-feed">
+                <div class="card-header">AI RIDER VISION FEED</div>
+                <div class="camera-container">
+                    <div id="street-view"></div>
+                    <div class="camera-overlay">
+                        <div class="scanline"></div>
+                        <div class="ai-overlay-tag">LIVE_VISION</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tactical-card glass log-panel">
+                <div class="card-header">FUSION KERNEL LOG</div>
+                <div id="fusion-log" class="mono-log">
+                    <div class="log-line">> BOOTING SECURE NAVIGATION...</div>
+                </div>
+            </div>
+        </aside>
+
+    </main>
+
+    <!-- ACTION BAR -->
+    <footer class="action-bar glass">
+        <div class="control-cluster">
+            <button class="action-btn primary" onclick="startTrip()">START NAVIGATION</button>
+            <button class="action-btn danger pulse-danger" id="btn-kill-gps" onclick="toggleGPSFailure()">KILL GPS SIGNAL</button>
+            <button class="action-btn secondary" onclick="toggleDiag()">DIAGNOSTICS</button>
+        </div>
+        <div class="telemetry-bar mono">
+            <span>UPTIME: <span id="uptime">0:00</span></span>
+            <span>CPU: 14%</span>
+            <span>MEM: 512MB [LOCAL_CACHE]</span>
+        </div>
+    </footer>
+
+    <!-- EMERGENCY SOS OVERLAY -->
+    <section id="sos-overlay" class="sos-container glass">
+        <div class="sos-content">
+            <div class="sos-icon-pulse">🚨</div>
+            <h1 class="sos-title">CRASH DETECTED</h1>
+            <p class="sos-subtitle">EMERGENCY SOS SEQUENCE INITIALIZED</p>
+            <div class="sos_message_box">
+                <p>CONTACTING EMERGENCY SERVICES...</p>
+                <p class="sms-status">SMS SENT TO: <span class="mono">+91 9172605822</span></p>
+            </div>
+            <div class="sos-countdown">AUTOMATIC RESCUE DISPATCH IN PROGRESS</div>
+        </div>
+    </section>
+
+    <!-- App Logic -->
+    <script src="demo_engine.js"></script>
+</body>
+</html>

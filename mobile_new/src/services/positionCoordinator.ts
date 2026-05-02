@@ -12,8 +12,9 @@ import * as gpsService from './gpsService';
 import * as sensorService from './sensorService';
 import * as deadReckoningService from './deadReckoningService';
 import * as headingService from './headingService';
+import * as backendService from './backendService';
 
-export type PositionMode = 'GPS' | 'DR' | 'UNKNOWN';
+export type PositionMode = 'GPS' | 'DR' | 'UNKNOWN' | 'FUSED';
 
 export interface CoordinatorPosition {
   lat: number;
@@ -21,17 +22,22 @@ export interface CoordinatorPosition {
   positionMode: PositionMode;
   confidence: number; // 0–1
   ts_ms: number;
+  landmarkName?: string;
 }
 
 type PositionListener = (pos: CoordinatorPosition) => void;
 const listeners: Set<PositionListener> = new Set();
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let lastTs = 0;
+let currentSessionId: string | null = null;
+let latestLandmark: string | null = null;
+let latestLandmarkTs = 0;
 
-export function startCoordinator(): void {
+export function startCoordinator(sessionId?: string): void {
   if (intervalId !== null) {
     return;
   }
+  currentSessionId = sessionId ?? null;
 
   // Wire IMU data into heading + DR
   sensorService.addIMUListener(imu => {
@@ -54,6 +60,7 @@ export function stopCoordinator(): void {
     clearInterval(intervalId);
     intervalId = null;
   }
+  currentSessionId = null;
   listeners.clear();
 }
 
@@ -112,6 +119,11 @@ function resolvePosition(): void {
     }
   }
 
+  // --- NEW: Backend Fusion (CV/Landmark Correction) ---
+  if (currentSessionId) {
+    checkBackendCorrections();
+  }
+
   // No position source available — emit UNKNOWN
   // App stays open, UI shows warning banner
   const drPos = deadReckoningService.getPosition();
@@ -124,7 +136,34 @@ function resolvePosition(): void {
   });
 }
 
+async function checkBackendCorrections(): Promise<void> {
+  if (!currentSessionId) return;
+
+  const correction = await backendService.getVisionCorrection(currentSessionId);
+  if (correction && correction.confidence > 0.8) {
+    const name = correction.payload.landmark || correction.payload.map_hint_name || 'Junction';
+    console.log(`[Coordinator] CV Correction received: ${name}`);
+    
+    latestLandmark = name;
+    latestLandmarkTs = Date.now();
+    
+    // Snap position would happen here
+  }
+}
+
 function emit(pos: CoordinatorPosition): void {
+  // If we have a recent landmark (< 5s), include it and consider mode FUSED
+  const now = Date.now();
+  if (latestLandmark && now - latestLandmarkTs < 5000) {
+    pos.landmarkName = latestLandmark;
+    if (pos.positionMode === 'DR' || pos.positionMode === 'UNKNOWN') {
+      pos.positionMode = 'FUSED';
+      pos.confidence = Math.max(pos.confidence, 0.9); // Vision boosts confidence
+    }
+  } else {
+    latestLandmark = null;
+  }
+
   // Deduplicate if ts hasn't advanced
   if (pos.ts_ms <= lastTs) {
     return;

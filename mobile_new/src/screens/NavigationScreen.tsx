@@ -60,6 +60,8 @@ interface NavDisplay {
   offRoute: boolean;
   destinationReached: boolean;
   currentPos: LatLon | null;
+  visionActive: boolean;
+  landmarkName?: string;
 }
 
 const INITIAL_NAV: NavDisplay = {
@@ -70,6 +72,7 @@ const INITIAL_NAV: NavDisplay = {
   offRoute: false,
   destinationReached: false,
   currentPos: null,
+  visionActive: false,
 };
 
 const NavigationScreen: React.FC<Props> = ({
@@ -145,6 +148,8 @@ const NavigationScreen: React.FC<Props> = ({
         offRoute: state.offRoute,
         destinationReached: state.destinationReached,
         currentPos: {lat: pos.lat, lon: pos.lon},
+        visionActive: pos.positionMode === 'FUSED',
+        landmarkName: pos.landmarkName, 
       });
 
       // Notify helmet via BLE
@@ -264,6 +269,13 @@ const NavigationScreen: React.FC<Props> = ({
           {nav.offRoute && (
             <View style={styles.offRouteBadge}>
               <Text style={styles.offRouteBadgeText}>OFF ROUTE</Text>
+            </View>
+          )}
+          {nav.visionActive && (
+            <View style={[styles.visionBadge, styles.visionBadgePulse]}>
+              <Text style={styles.visionBadgeText}>
+                👁️ VISION: {nav.landmarkName ? nav.landmarkName.toUpperCase() : 'CONFIRMED'}
+              </Text>
             </View>
           )}
         </View>
@@ -396,6 +408,29 @@ const styles = StyleSheet.create({
   },
   stopButtonPressed: {backgroundColor: '#c5221f', transform: [{scale: 0.98}]},
   stopButtonText: {color: '#fff', fontSize: 16, fontWeight: '700'},
+  visionBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#34a853',
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#34a853',
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  visionBadgePulse: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  visionBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
 });
 
 export default NavigationScreen;

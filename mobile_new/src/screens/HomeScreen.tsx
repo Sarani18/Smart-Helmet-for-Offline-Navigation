@@ -40,7 +40,8 @@ interface Props {
 }
 
 function makeSessionId(): string {
-  return `ride_${Date.now()}`;
+  // Hardcoded for testing with the Python scripts
+  return 'test_mobile_session'; 
 }
 
 const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {

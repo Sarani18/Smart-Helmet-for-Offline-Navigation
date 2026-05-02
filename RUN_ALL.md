@@ -2,6 +2,12 @@
 
 Follow these steps in 4 separate terminal windows to run the full simulation.
 
+### 🔑 Prerequisites: Google Maps API Key
+To see the **360° Street View**, you must add your API key:
+1. Open the `.env` file in the root folder.
+2. Replace `YOUR_API_KEY_HERE` with your key from the Google Cloud Console.
+3. Save the file.
+
 ### 1️⃣ Terminal 1: Navigation Server (Port 8000)
 **Role:** Main API and HUD state manager.
 ```bash

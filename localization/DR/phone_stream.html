@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>DR Sensor Stream</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>DR Sensor Stream</title>
+    <!-- Removed external font call for instant local loading -->
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', -apple-system, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
             background: #0a0e1a;
             color: #e2e8f0;
             min-height: 100vh;
@@ -60,6 +61,35 @@
             background: #ef4444;
             box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
             transition: all 0.3s;
+        }
+
+        .sensor-heartbeat {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin: 10px 0;
+            padding: 8px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+        }
+
+        .hb-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 10px;
+            color: #64748b;
+        }
+
+        .hb-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: #ef4444;
+        }
+
+        .hb-dot.active {
+            background: #22c55e;
+            box-shadow: 0 0 5px #22c55e;
         }
 
         .status-dot.active {
@@ -329,6 +359,21 @@
     <div class="batch-counter" id="batchCounter">Batches: 0</div>
 </div>
 
+<div class="sensor-heartbeat">
+    <div class="hb-item">
+        <div class="hb-dot" id="hb-motion"></div> MOTION
+    </div>
+    <div class="hb-item">
+        <div class="hb-dot" id="hb-orient"></div> ORIENT
+    </div>
+    <div class="hb-item">
+        <div class="hb-dot" id="hb-gps"></div> GPS
+    </div>
+    <div class="hb-item">
+        <div class="hb-dot" id="hb-net"></div> NET
+    </div>
+</div>
+
 <div class="main">
     <!-- Connect -->
     <div class="connect-section">
@@ -492,17 +537,21 @@
             }
 
             // Register sensor listeners
-            window.addEventListener('devicemotion', onDeviceMotion);
-            window.addEventListener('deviceorientation', onDeviceOrientation);
+            window.addEventListener('devicemotion', onDeviceMotion, true);
+            window.addEventListener('deviceorientation', onDeviceOrientation, true);
 
             sensorsEnabled = true;
+            document.getElementById('hb-motion').classList.add('active');
+            document.getElementById('hb-orient').classList.add('active');
+            
             document.getElementById('btnPermission').disabled = true;
-            document.getElementById('btnPermission').textContent = '✅ Sensors Active';
+            document.getElementById('btnPermission').textContent = '✅ Sensors Initialized';
             document.getElementById('btnStart').disabled = false;
-            log('Sensors enabled successfully', 'success');
+            log('Sensors requested successfully', 'success');
 
         } catch (err) {
             log('Sensor error: ' + err.message, 'error');
+            alert("Sensor Access Error: Use HTTPS and stay on the same WiFi.");
         }
     }
 
@@ -735,6 +784,9 @@
 
             if (resp.ok) {
                 batchCount++;
+                document.getElementById('hb-net').classList.add('active');
+                setTimeout(() => document.getElementById('hb-net').classList.remove('active'), 100);
+                
                 document.getElementById('batchCounter').textContent =
                     `Batches: ${batchCount} | ${batch.readings.length} readings`;
 
@@ -743,6 +795,7 @@
             }
         } catch (e) {
             log('Send failed: ' + e.message, 'error');
+            document.getElementById('hb-net').classList.remove('active');
         }
     }
 

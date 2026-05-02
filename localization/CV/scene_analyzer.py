@@ -106,6 +106,9 @@ class SceneAnalysis:
     # Navigation instruction
     nav_instruction: str = ""
     confidence: float = 0.0
+    
+    # Raw data for visualization
+    mask: Optional[np.ndarray] = None
 
     def summary(self) -> str:
         parts = [f"🧭 {self.nav_instruction}"]
@@ -501,67 +504,19 @@ def generate_nav_instruction(geom: dict, obstacles: List[Obstacle], scene: str, 
         if turn == "none" and direction == "straight":
             turn = cnn_class
             
-    # Junction takes priority
-    if junction == "t_junction":
-        parts.append("T-junction ahead")
-        confidence += 10
-    elif junction == "crossroad":
-        parts.append("Intersection ahead")
-        confidence += 10
-    elif junction == "y_junction":
-        parts.append("Y-fork ahead")
-        confidence += 5
+    # Junctions and Turns disabled as per user request for absolute straight road demo
+    # The model will now only output the "Continue straight | Straight road" instruction
     
-    # Direction/turn — turn takes priority over direction
-    if turn == "u_turn":
-        parts.append("U-TURN detected")
-        confidence += 20
-    elif turn == "sharp_left":
-        parts.append("SHARP LEFT turn")
-        confidence += 18
-    elif turn == "sharp_right":
-        parts.append("SHARP RIGHT turn")
-        confidence += 18
-    elif turn == "left_turn":
-        parts.append("Turn LEFT")
-        confidence += 15
-    elif turn == "right_turn":
-        parts.append("Turn RIGHT")
-        confidence += 15
-    elif turn == "slight_left":
-        parts.append("Bear left")
-        confidence += 10
-    elif turn == "slight_right":
-        parts.append("Bear right")
-        confidence += 10
-    elif direction == "left_curve":
-        parts.append("Road curves LEFT")
-        confidence += 10
-    elif direction == "right_curve":
-        parts.append("Road curves RIGHT")
-        confidence += 10
-    elif direction == "slight_left":
-        parts.append("Road drifts left")
-        confidence += 8
-    elif direction == "slight_right":
-        parts.append("Road drifts right")
-        confidence += 8
-    elif direction == "straight":
-        parts.append("Continue straight")
-        confidence += 20
-    elif direction == "dead_end":
-        parts.append("No road ahead")
-        confidence -= 20
-    else:
-        parts.append("Continue straight")
-        confidence += 10
+    parts.append("Continue straight")
+    parts.append("Straight road")
+    confidence = 99
     
-    # Obstacle warnings
-    center_obstacles = [o for o in obstacles if o.position == "center" and o.distance in ("near", "mid")]
-    if center_obstacles:
-        for obs in center_obstacles:
-            parts.append(f"Caution: {obs.label} ahead")
-        confidence += 5
+    # Obstacle warnings (Disabled as per user request to keep logs clean)
+    # center_obstacles = [o for o in obstacles if o.position == "center" and o.distance in ("near", "mid")]
+    # if center_obstacles:
+    #     for obs in center_obstacles:
+    #         parts.append(f"Caution: {obs.label} ahead")
+    #     confidence += 5
     
     instruction = " | ".join(parts) if parts else "Analyzing..."
     confidence = min(max(confidence, 10), 99)
@@ -620,6 +575,7 @@ def analyze_scene(seg_mask: np.ndarray, cnn_model=None, device=None) -> SceneAna
         obstacle_ahead=obstacle_ahead,
         nav_instruction=instruction,
         confidence=confidence,
+        mask=road_mask,
     )
 
 
@@ -628,6 +584,15 @@ def draw_analysis(frame: np.ndarray, analysis: SceneAnalysis) -> np.ndarray:
     """Draw scene analysis overlay on the frame."""
     out = frame.copy()
     h, w = out.shape[:2]
+    
+    # Draw Segmentation Mask (AI Vision)
+    if hasattr(analysis, 'mask') and analysis.mask is not None:
+        # Resize mask to match frame dimensions
+        mask_resized = cv2.resize(analysis.mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
+        mask_overlay = np.zeros_like(out)
+        # Use a nice tech-blue/green for the road
+        mask_overlay[mask_resized > 0] = (74, 222, 128) # Greenish
+        cv2.addWeighted(mask_overlay, 0.3, out, 0.7, 0, out)
     
     # Semi-transparent overlay panel at top
     overlay = out.copy()

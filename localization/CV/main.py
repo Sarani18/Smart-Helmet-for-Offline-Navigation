@@ -37,7 +37,9 @@ logger = logging.getLogger("cv_service")
 # --- Configuration ---
 NAV_API_URL = "http://localhost:8000/api/navigation/localization/visual-event"
 PORT = 8001
-VIDEO_SOURCE = "sample_drive.mp4" # Using sample video for testing
+# Use static image as repeated frames (fallback when no dashcam video available)
+VIDEO_SOURCE = "real_road_test.png"
+USE_STATIC_IMAGE = True  # loops the same image to simulate a dashcam feed
 
 # --- Globals for State and Inference ---
 class CVState:
@@ -122,23 +124,33 @@ async def get_latest():
     """Return the latest detection string for the UI console."""
     return {"latest": state.latest_detection}
 
-# --- Background Task: Video Processing Loop ---
+# --- Background Task: Video/Image Processing Loop ---
 async def cv_inference_loop():
     """
-    Reads the video file, infers frame by frame, and broadcasts events if a turn or junction is detected.
+    Reads frames from video OR static image, infers, and broadcasts events.
+    Static image mode: reads real_road_test.png once and loops it at TARGET_FPS.
     """
-    logger.info(f"Opening video source: {VIDEO_SOURCE}")
-    cap = cv2.VideoCapture(VIDEO_SOURCE)
-    if not cap.isOpened():
-        logger.error(f"Cannot open {VIDEO_SOURCE}")
-        state.running = False
-        return
-
-    # Throttle inference to simulate real-time processing and save CPU
     TARGET_FPS = 5
     frame_duration = 1.0 / TARGET_FPS
 
-    # Keep track of last emitted to prevent spamming
+    # --- Load source frame(s) ---
+    if USE_STATIC_IMAGE:
+        logger.info(f"Opening static image source: {VIDEO_SOURCE}")
+        static_frame = cv2.imread(VIDEO_SOURCE)
+        if static_frame is None:
+            logger.error(f"Cannot read image: {VIDEO_SOURCE}")
+            state.running = False
+            return
+        logger.info("✅ Static image loaded — looping as simulated dashcam feed")
+        cap = None
+    else:
+        logger.info(f"Opening video source: {VIDEO_SOURCE}")
+        cap = cv2.VideoCapture(VIDEO_SOURCE)
+        if not cap.isOpened():
+            logger.error(f"Cannot open {VIDEO_SOURCE}")
+            state.running = False
+            return
+
     last_emitted_turn = "STRAIGHT"
     last_emitted_junction = "none"
     frames_since_event = 0
@@ -147,50 +159,48 @@ async def cv_inference_loop():
         async with httpx.AsyncClient(timeout=2.0) as client:
             while state.running:
                 loop_start = time.time()
-                
-                ret, frame = cap.read()
-                if not ret:
-                    # Video ended, loop it
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
+
+                # Get next frame
+                if USE_STATIC_IMAGE:
+                    frame = static_frame.copy()
+                else:
+                    ret, frame = cap.read()
+                    if not ret:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        continue
 
                 # Run Inference
                 tensor = preprocess(frame)
                 seg = segment(state.lraspp_model, tensor, state.device)
                 analysis = analyze_scene(seg, state.cnn_model, state.device)
 
+                # Update latest detection for UI polling
+                state.latest_detection = f"{analysis.nav_instruction} | {analysis.junction_type} | conf:{analysis.confidence:.0f}%"
+
                 # Map turns to Navigation spec
                 turn_map = {
-                    "slight_left": "SLIGHT_LEFT",
-                    "left_turn": "LEFT",
-                    "sharp_left": "LEFT",
-                    "slight_right": "SLIGHT_RIGHT",
-                    "right_turn": "RIGHT",
-                    "sharp_right": "RIGHT",
-                    "u_turn": "U_TURN",
-                    "none": "STRAIGHT"
+                    "slight_left": "SLIGHT_LEFT", "left_turn": "LEFT", "sharp_left": "LEFT",
+                    "slight_right": "SLIGHT_RIGHT", "right_turn": "RIGHT", "sharp_right": "RIGHT",
+                    "u_turn": "U_TURN", "none": "STRAIGHT"
                 }
-
                 current_turn = turn_map.get(analysis.turn_type, "STRAIGHT")
-                if current_turn == "STRAIGHT": 
-                    # fallback to road_direction if there is no immediate turn
-                    dir_map = {"slight_left": "SLIGHT_LEFT", "left_curve": "LEFT", "slight_right": "SLIGHT_RIGHT", "right_curve":"RIGHT"}
+                if current_turn == "STRAIGHT":
+                    dir_map = {"slight_left": "SLIGHT_LEFT", "left_curve": "LEFT",
+                               "slight_right": "SLIGHT_RIGHT", "right_curve": "RIGHT"}
                     current_turn = dir_map.get(analysis.road_direction, "STRAIGHT")
 
                 current_junction = analysis.junction_type
-
                 confidence_scale = analysis.confidence / 100.0
-
                 frames_since_event += 1
 
                 # 1. Emit TURN Event if it changed significantly
                 if current_turn != "STRAIGHT" and current_turn != last_emitted_turn and frames_since_event > 5:
-                    msg = f"🛣️ Detected Turn: {current_turn} ({confidence_scale*100:.0f}%)"
+                    msg = f"🛣️ CV TURN: {current_turn} ({confidence_scale*100:.0f}%)"
                     logger.info(msg)
                     state.latest_detection = msg
                     payload = {
                         "session_id": state.session_id,
-                        "event_id": f"evt_cv_{uuid.uuid4().hex[:8]}",
+                        "event_id": f"evt_cv_{int(time.time()*1000)}",
                         "ts_ms": int(time.time() * 1000),
                         "event_type": "TURN",
                         "confidence": confidence_scale,
@@ -204,20 +214,18 @@ async def cv_inference_loop():
                         logger.warning(f"Failed to send TURN event: {e}")
 
                 # 2. Emit LANDMARK (Junction) Event
-                if current_junction in ["t_junction", "y_junction", "crossroad"] and current_junction != last_emitted_junction and frames_since_event > 5:
-                    msg = f"⚠️ Detected Junction: {current_junction} ({confidence_scale*100:.0f}%)"
+                if current_junction in ["t_junction", "y_junction", "crossroad"] \
+                        and current_junction != last_emitted_junction and frames_since_event > 5:
+                    msg = f"⚠️ CV JUNCTION: {current_junction} ({confidence_scale*100:.0f}%)"
                     logger.info(msg)
                     state.latest_detection = msg
                     payload = {
                         "session_id": state.session_id,
-                        "event_id": f"evt_cv_{uuid.uuid4().hex[:8]}",
+                        "event_id": f"evt_cv_{int(time.time()*1000)}",
                         "ts_ms": int(time.time() * 1000),
                         "event_type": "LANDMARK",
                         "confidence": confidence_scale,
-                        "payload": {
-                            "landmark_class": "JUNCTION",
-                            "map_hint_name": current_junction
-                        }
+                        "payload": {"landmark_class": "JUNCTION", "map_hint_name": current_junction}
                     }
                     try:
                         await client.post(NAV_API_URL, json=payload)
@@ -226,21 +234,19 @@ async def cv_inference_loop():
                     except Exception as e:
                         logger.warning(f"Failed to send LANDMARK event: {e}")
 
-                # Reset emitting guards when returning to normal
                 if current_turn == "STRAIGHT":
                     last_emitted_turn = "STRAIGHT"
                 if current_junction == "none":
                     last_emitted_junction = "none"
 
-                # Throttle
                 elapsed = time.time() - loop_start
-                sleep_time = max(0, frame_duration - elapsed)
-                await asyncio.sleep(sleep_time)
+                await asyncio.sleep(max(0, frame_duration - elapsed))
 
     except Exception as e:
         logger.error(f"Inference loop crashed: {e}")
     finally:
-        cap.release()
+        if cap:
+            cap.release()
         state.running = False
         logger.info("CV Inference Loop terminated.")
 
