@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "SmartHelmetNav",
   "version": "0.0.1",
   "private": true,
@@ -13,20 +13,12 @@
     "@react-native-community/geolocation": "3.4.0",
     "react": "18.2.0",
     "react-native": "0.73.9",
-<<<<<<< HEAD
-=======
-    "react-native-background-actions": "4.0.0",
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     "react-native-ble-plx": "3.2.0",
     "react-native-fs": "2.20.0",
     "react-native-maps": "1.10.0",
     "react-native-safe-area-context": "^4.8.2",
-<<<<<<< HEAD
     "react-native-sensors": "7.3.0",
     "react-native-webview": "^13.16.1"
-=======
-    "react-native-sensors": "7.3.0"
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

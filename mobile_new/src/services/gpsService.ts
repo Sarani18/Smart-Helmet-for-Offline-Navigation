@@ -1,7 +1,7 @@
-/**
+﻿/**
  * GPS service using @react-native-community/geolocation.
  * Graceful degradation: if GPS unavailable, sets gpsAvailable=false
- * and notifies listeners — does NOT throw or crash the app.
+ * and notifies listeners â€” does NOT throw or crash the app.
  */
 import Geolocation from '@react-native-community/geolocation';
 
@@ -18,14 +18,10 @@ type GPSListener = (pos: GPSPosition | null) => void;
 let watchId: number | null = null;
 let gpsAvailable = false;
 let latestPosition: GPSPosition | null = null;
-<<<<<<< HEAD
 let lastLiveFixTsMs = 0;
 let gpsError: string | null = null;
 const listeners: Set<GPSListener> = new Set();
 const GPS_STALE_MS = 7000;
-=======
-const listeners: Set<GPSListener> = new Set();
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
 function notifyListeners(pos: GPSPosition | null): void {
   listeners.forEach(l => {
@@ -37,7 +33,6 @@ function notifyListeners(pos: GPSPosition | null): void {
   });
 }
 
-<<<<<<< HEAD
 function markGPSUnavailable(error: string | null = null): void {
   const wasAvailable = gpsAvailable;
   gpsAvailable = false;
@@ -51,8 +46,6 @@ function hasFreshLiveFix(): boolean {
   return lastLiveFixTsMs > 0 && Date.now() - lastLiveFixTsMs <= GPS_STALE_MS;
 }
 
-=======
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 export function startGPS(): void {
   if (watchId !== null) {
     return;
@@ -63,7 +56,6 @@ export function startGPS(): void {
     authorizationLevel: 'whenInUse',
   });
 
-<<<<<<< HEAD
   // Immediately emit last-known cached position (up to 5 min old) so the map
   // shows a coarse dot within ~100ms while the accurate fix is being acquired.
   Geolocation.getCurrentPosition(
@@ -79,7 +71,7 @@ export function startGPS(): void {
         notifyListeners(latestPosition);
       }
     },
-    () => {/* no cached position available — watchPosition will provide the first fix */},
+    () => {/* no cached position available â€” watchPosition will provide the first fix */},
     {enableHighAccuracy: false, timeout: 2000, maximumAge: 300000},
   );
 
@@ -88,11 +80,6 @@ export function startGPS(): void {
       gpsAvailable = true;
       gpsError = null;
       lastLiveFixTsMs = Date.now();
-=======
-  watchId = Geolocation.watchPosition(
-    position => {
-      gpsAvailable = true;
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
       latestPosition = {
         lat: position.coords.latitude,
         lon: position.coords.longitude,
@@ -106,23 +93,14 @@ export function startGPS(): void {
       notifyListeners(latestPosition);
     },
     error => {
-      // GPS signal lost or permission denied — degrade gracefully
+      // GPS signal lost or permission denied â€” degrade gracefully
       console.warn('GPS error code', error.code, ':', error.message);
-<<<<<<< HEAD
       markGPSUnavailable(error.message);
-=======
-      gpsAvailable = false;
-      notifyListeners(null);
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     },
     {
       enableHighAccuracy: true,
       timeout: 10000,
-<<<<<<< HEAD
       maximumAge: 30000,
-=======
-      maximumAge: 5000,
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
       distanceFilter: 0,
     },
   );
@@ -134,7 +112,6 @@ export function stopGPS(): void {
     watchId = null;
   }
   gpsAvailable = false;
-<<<<<<< HEAD
   gpsError = null;
   lastLiveFixTsMs = 0;
 }
@@ -150,14 +127,6 @@ export function getGPSError(): string | null {
   return gpsError;
 }
 
-=======
-}
-
-export function isGPSAvailable(): boolean {
-  return gpsAvailable;
-}
-
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 export function getLatestGPS(): GPSPosition | null {
   return latestPosition;
 }
