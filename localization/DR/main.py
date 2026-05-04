@@ -693,17 +693,23 @@ app.include_router(router)
 
 
 # ------------------------------------------------------------------
-# Serve phone sensor page at /phone
+# Serve phone sensor page at /phone (Optimized with Memory Cache)
 # ------------------------------------------------------------------
 HTML_DIR = Path(__file__).parent
+_CACHED_PHONE_HTML: Optional[str] = None
 
 @app.get("/phone", response_class=HTMLResponse)
 async def phone_page():
-    """Serve the phone sensor streaming page."""
-    html_path = HTML_DIR / "phone_stream.html"
-    if html_path.exists():
-        return HTMLResponse(content=html_path.read_text(), status_code=200)
-    return HTMLResponse(content="<h1>phone_stream.html not found</h1>", status_code=404)
+    """Serve the phone sensor streaming page from memory for high speed."""
+    global _CACHED_PHONE_HTML
+    if _CACHED_PHONE_HTML is None:
+        html_path = HTML_DIR / "phone_stream.html"
+        if html_path.exists():
+            _CACHED_PHONE_HTML = html_path.read_text()
+        else:
+            return HTMLResponse(content="<h1>phone_stream.html not found</h1>", status_code=404)
+    
+    return HTMLResponse(content=_CACHED_PHONE_HTML, status_code=200)
 
 
 # ===================================================================

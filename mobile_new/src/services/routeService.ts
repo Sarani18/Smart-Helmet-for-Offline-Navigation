@@ -1,10 +1,14 @@
 /**
  * Route service: geocoding via Nominatim, routing via OSRM, local caching via RNFS.
+<<<<<<< HEAD
  *
  * Key behaviours:
  * - Cache-first: same origin+destination → instant load from disk, no network hit
  * - 15s timeout on every fetch: never hangs, always throws a clear error
  * - Only needs network on first use for a given route
+=======
+ * Only needs network at route-fetch time. After that, works fully offline.
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
  */
 import RNFS from 'react-native-fs';
 
@@ -12,6 +16,7 @@ const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 const CACHE_DIR = `${RNFS.DocumentDirectoryPath}/osrm_routes`;
 
+<<<<<<< HEAD
 const FETCH_TIMEOUT_MS = 120000; // 30s — OSRM demo server can be slow
 
 function isAbortError(e: unknown): boolean {
@@ -21,6 +26,8 @@ function isAbortError(e: unknown): boolean {
   );
 }
 
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 export interface LatLon {
   lat: number;
   lon: number;
@@ -36,11 +43,16 @@ export interface RouteStep {
 export interface ParsedRoute {
   id: string;
   totalDistanceM: number;
+<<<<<<< HEAD
   polyline: LatLon[];
+=======
+  polyline: LatLon[]; // full path
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   steps: RouteStep[];
   rawJson: unknown;
 }
 
+<<<<<<< HEAD
 // ---- Public API ----
 
 /** Geocode a place name to coordinates using Nominatim. 15s timeout. */
@@ -65,19 +77,42 @@ export async function geocode(placeName: string): Promise<LatLon> {
   const data = (await res.json()) as Array<{lat: string; lon: string}>;
   if (!data || data.length === 0) {
     throw new Error(`Location not found: "${placeName}". Try a more specific name.`);
+=======
+/** Geocode a place name to coordinates using Nominatim. */
+export async function geocode(placeName: string): Promise<LatLon> {
+  const params = new URLSearchParams({
+    q: placeName,
+    format: 'json',
+    limit: '1',
+  });
+  const res = await fetch(`${NOMINATIM_URL}?${params.toString()}`, {
+    headers: {'User-Agent': 'SmartHelmetNav/1.0'},
+  });
+  if (!res.ok) {
+    throw new Error(`Nominatim error: ${res.status}`);
+  }
+  const data = (await res.json()) as Array<{lat: string; lon: string}>;
+  if (!data || data.length === 0) {
+    throw new Error(`No results found for: ${placeName}`);
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   }
   return {lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon)};
 }
 
+<<<<<<< HEAD
 /**
  * Fetch route from OSRM (cache-first).
  * If the same origin+destination was fetched before, returns cached result instantly.
  * Cache key is derived from the place name strings, not coordinates.
  */
+=======
+/** Fetch route from OSRM and cache to disk. */
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 export async function fetchRoute(
   origin: LatLon,
   dest: LatLon,
   sessionId: string,
+<<<<<<< HEAD
   cacheKey?: string,
 ): Promise<ParsedRoute> {
   // Try cache first
@@ -140,6 +175,32 @@ export async function loadCachedRoute(
 
 async function loadByKey(key: string): Promise<ParsedRoute | null> {
   const path = `${CACHE_DIR}/route_${key}.json`;
+=======
+): Promise<ParsedRoute> {
+  const coords = `${origin.lon},${origin.lat};${dest.lon},${dest.lat}`;
+  const url = `${OSRM_URL}/${coords}?overview=full&geometries=geojson&steps=true&annotations=false`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`OSRM error: ${res.status}`);
+  }
+  const json = (await res.json()) as OSRMResponse;
+
+  if (json.code !== 'Ok' || !json.routes || json.routes.length === 0) {
+    throw new Error('OSRM returned no routes');
+  }
+
+  const route = parseOSRMRoute(json, sessionId);
+  await cacheRoute(sessionId, json);
+  return route;
+}
+
+/** Load a previously cached route. Returns null if not found. */
+export async function loadCachedRoute(
+  sessionId: string,
+): Promise<ParsedRoute | null> {
+  const path = `${CACHE_DIR}/route_${sessionId}.json`;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   try {
     const exists = await RNFS.exists(path);
     if (!exists) {
@@ -147,13 +208,20 @@ async function loadByKey(key: string): Promise<ParsedRoute | null> {
     }
     const raw = await RNFS.readFile(path, 'utf8');
     const json = JSON.parse(raw) as OSRMResponse;
+<<<<<<< HEAD
     return parseOSRMRoute(json, key);
   } catch (e) {
     console.warn('loadByKey failed for', key, e);
+=======
+    return parseOSRMRoute(json, sessionId);
+  } catch (e) {
+    console.warn('loadCachedRoute failed:', e);
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     return null;
   }
 }
 
+<<<<<<< HEAD
 /** fetch() with AbortController timeout. Throws on timeout or network error. */
 async function fetchWithTimeout(
   url: string,
@@ -176,6 +244,9 @@ function slugify(s: string): string {
     .replace(/^_|_$/g, '')
     .slice(0, 80);
 }
+=======
+// ---- Internal helpers ----
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
 interface OSRMResponse {
   code: string;
@@ -197,7 +268,15 @@ interface OSRMStep {
 
 function parseOSRMRoute(json: OSRMResponse, sessionId: string): ParsedRoute {
   const r = json.routes[0];
+<<<<<<< HEAD
   const polyline: LatLon[] = r.geometry.coordinates.map(([lon, lat]) => ({lat, lon}));
+=======
+
+  const polyline: LatLon[] = r.geometry.coordinates.map(([lon, lat]) => ({
+    lat,
+    lon,
+  }));
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
   const steps: RouteStep[] = [];
   for (const leg of r.legs) {
@@ -211,6 +290,7 @@ function parseOSRMRoute(json: OSRMResponse, sessionId: string): ParsedRoute {
     }
   }
 
+<<<<<<< HEAD
   return {id: sessionId, totalDistanceM: r.distance, polyline, steps, rawJson: json};
 }
 
@@ -228,12 +308,52 @@ function buildInstruction(maneuver: {type: string; modifier?: string}): string {
 }
 
 async function cacheRoute(key: string, json: OSRMResponse): Promise<void> {
+=======
+  return {
+    id: sessionId,
+    totalDistanceM: r.distance,
+    polyline,
+    steps,
+    rawJson: json,
+  };
+}
+
+function buildInstruction(maneuver: {
+  type: string;
+  modifier?: string;
+}): string {
+  const mod = maneuver.modifier ?? '';
+  switch (maneuver.type) {
+    case 'turn':
+      return `Turn ${mod}`;
+    case 'depart':
+      return 'Start route';
+    case 'arrive':
+      return 'You have arrived';
+    case 'roundabout':
+      return `Enter roundabout and take exit ${mod}`;
+    case 'merge':
+      return `Merge ${mod}`;
+    case 'fork':
+      return `Keep ${mod}`;
+    default:
+      return `Continue ${mod}`.trim();
+  }
+}
+
+async function cacheRoute(sessionId: string, json: OSRMResponse): Promise<void> {
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   try {
     const exists = await RNFS.exists(CACHE_DIR);
     if (!exists) {
       await RNFS.mkdir(CACHE_DIR);
     }
+<<<<<<< HEAD
     await RNFS.writeFile(`${CACHE_DIR}/route_${key}.json`, JSON.stringify(json), 'utf8');
+=======
+    const path = `${CACHE_DIR}/route_${sessionId}.json`;
+    await RNFS.writeFile(path, JSON.stringify(json), 'utf8');
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   } catch (e) {
     console.warn('Failed to cache route:', e);
   }

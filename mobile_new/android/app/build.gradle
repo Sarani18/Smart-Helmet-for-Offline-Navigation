@@ -1,7 +1,10 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+<<<<<<< HEAD
 apply plugin: "com.chaquo.python"
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -70,11 +73,14 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
+<<<<<<< HEAD
 def reactNativeArchitectures() {
     def value = project.getProperties().get("reactNativeArchitectures")
     return value ? value.split(",") : ["armeabi-v7a", "arm64-v8a", "x86", "x86_64"]
 }
 
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -87,6 +93,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+<<<<<<< HEAD
 
         ndk {
             abiFilters (*reactNativeArchitectures())
@@ -95,6 +102,8 @@ android {
         python {
             buildPython "python3"
         }
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     }
     signingConfigs {
         debug {

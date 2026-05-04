@@ -4,6 +4,7 @@
  * Graceful degradation: logs warning if sensors unavailable, does not crash.
  */
 import {
+<<<<<<< HEAD
   NativeEventEmitter,
   NativeModules,
 } from 'react-native';
@@ -25,10 +26,13 @@ import type {Subscription} from 'rxjs';
 });
 
 const {
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   accelerometer,
   gyroscope,
   setUpdateIntervalForType,
   SensorTypes,
+<<<<<<< HEAD
 } = require('react-native-sensors');
 
 interface SmartHelmetSensorNative {
@@ -59,6 +63,11 @@ const smartHelmetSensors = NativeModules.SmartHelmetSensors as
 const smartHelmetEmitter = smartHelmetSensors
   ? new NativeEventEmitter(smartHelmetSensors)
   : null;
+=======
+} from 'react-native-sensors';
+import type {Subscription} from 'rxjs';
+
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
 export interface IMUReading {
   accel: {x: number; y: number; z: number};
@@ -68,6 +77,7 @@ export interface IMUReading {
 
 let accelSub: Subscription | null = null;
 let gyroSub: Subscription | null = null;
+<<<<<<< HEAD
 let nativeDataSub: {remove: () => void} | null = null;
 let nativeStatusSub: {remove: () => void} | null = null;
 let sensorsAvailable = false;
@@ -77,11 +87,15 @@ let gyroActive = false;
 let usingNativeSensors = false;
 let nativeStarted = false;
 let sensorStatusMessage: string | null = null;
+=======
+let sensorsAvailable = false;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
 let latestAccel = {x: 0, y: 0, z: 0};
 let latestGyro = {x: 0, y: 0, z: 0};
 let latestTs = 0;
 
+<<<<<<< HEAD
 const FILTER_ALPHA = 0.18;
 const ACCEL_DEADBAND = 0.03;
 const GYRO_DEADBAND = 0.005;
@@ -108,6 +122,8 @@ function smoothVector(
   };
 }
 
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 type IMUListener = (reading: IMUReading) => void;
 const listeners: Set<IMUListener> = new Set();
 
@@ -130,6 +146,7 @@ function notifyListeners(): void {
 }
 
 export function startSensors(): void {
+<<<<<<< HEAD
   if (nativeStarted || accelSub || gyroSub) {
     return;
   }
@@ -186,6 +203,8 @@ export function startSensors(): void {
     return;
   }
 
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   try {
     setUpdateIntervalForType(SensorTypes.accelerometer, 100); // 10Hz
     setUpdateIntervalForType(SensorTypes.gyroscope, 100);
@@ -193,23 +212,33 @@ export function startSensors(): void {
     accelSub = accelerometer.subscribe({
       next: (data: {x: number; y: number; z: number}) => {
         sensorsAvailable = true;
+<<<<<<< HEAD
         accelActive = true;
         latestAccel = smoothVector(latestAccel, data, ACCEL_DEADBAND);
+=======
+        latestAccel = {x: data.x, y: data.y, z: data.z};
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
         latestTs = Date.now();
         notifyListeners();
       },
       error: (e: unknown) => {
+<<<<<<< HEAD
         const msg = String(e);
         console.warn('Accelerometer unavailable — DR heading will be skipped:', msg);
         accelActive = false;
         sensorsAvailable = gyroActive;
         sensorError = `Accelerometer: ${msg}`;
+=======
+        console.warn('Accelerometer unavailable — DR heading will be skipped:', e);
+        sensorsAvailable = false;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
       },
     });
 
     gyroSub = gyroscope.subscribe({
       next: (data: {x: number; y: number; z: number}) => {
         sensorsAvailable = true;
+<<<<<<< HEAD
         gyroActive = true;
         latestGyro = smoothVector(latestGyro, data, GYRO_DEADBAND);
         // Notify with updated gyro only if accel has already fired at least once
@@ -232,11 +261,23 @@ export function startSensors(): void {
     accelActive = false;
     gyroActive = false;
     sensorError = msg;
+=======
+        latestGyro = {x: data.x, y: data.y, z: data.z};
+      },
+      error: (e: unknown) => {
+        console.warn('Gyroscope unavailable:', e);
+      },
+    });
+  } catch (e) {
+    console.warn('Sensors unavailable — DR heading will be skipped:', e);
+    sensorsAvailable = false;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   }
 }
 
 export function stopSensors(): void {
   try {
+<<<<<<< HEAD
     smartHelmetSensors?.stop();
     nativeDataSub?.remove();
     nativeStatusSub?.remove();
@@ -258,12 +299,21 @@ export function stopSensors(): void {
 
 export function getSensorError(): string | null {
   return sensorError;
+=======
+    accelSub?.unsubscribe();
+    gyroSub?.unsubscribe();
+  } catch (_) {}
+  accelSub = null;
+  gyroSub = null;
+  sensorsAvailable = false;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 }
 
 export function isSensorsAvailable(): boolean {
   return sensorsAvailable;
 }
 
+<<<<<<< HEAD
 export function getSensorStatus(): string {
   if (sensorError) {
     return sensorError;
@@ -290,6 +340,8 @@ export function getSensorStatus(): string {
   return 'Sensors not started';
 }
 
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 export function getLatestIMU(): IMUReading | null {
   if (!sensorsAvailable || latestTs === 0) {
     return null;
@@ -299,9 +351,12 @@ export function getLatestIMU(): IMUReading | null {
 
 export function addIMUListener(listener: IMUListener): () => void {
   listeners.add(listener);
+<<<<<<< HEAD
   const latest = getLatestIMU();
   if (latest) {
     listener(latest);
   }
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   return () => listeners.delete(listener);
 }

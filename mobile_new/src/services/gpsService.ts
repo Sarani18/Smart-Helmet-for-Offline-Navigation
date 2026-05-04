@@ -18,10 +18,14 @@ type GPSListener = (pos: GPSPosition | null) => void;
 let watchId: number | null = null;
 let gpsAvailable = false;
 let latestPosition: GPSPosition | null = null;
+<<<<<<< HEAD
 let lastLiveFixTsMs = 0;
 let gpsError: string | null = null;
 const listeners: Set<GPSListener> = new Set();
 const GPS_STALE_MS = 7000;
+=======
+const listeners: Set<GPSListener> = new Set();
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
 function notifyListeners(pos: GPSPosition | null): void {
   listeners.forEach(l => {
@@ -33,6 +37,7 @@ function notifyListeners(pos: GPSPosition | null): void {
   });
 }
 
+<<<<<<< HEAD
 function markGPSUnavailable(error: string | null = null): void {
   const wasAvailable = gpsAvailable;
   gpsAvailable = false;
@@ -46,6 +51,8 @@ function hasFreshLiveFix(): boolean {
   return lastLiveFixTsMs > 0 && Date.now() - lastLiveFixTsMs <= GPS_STALE_MS;
 }
 
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 export function startGPS(): void {
   if (watchId !== null) {
     return;
@@ -56,6 +63,7 @@ export function startGPS(): void {
     authorizationLevel: 'whenInUse',
   });
 
+<<<<<<< HEAD
   // Immediately emit last-known cached position (up to 5 min old) so the map
   // shows a coarse dot within ~100ms while the accurate fix is being acquired.
   Geolocation.getCurrentPosition(
@@ -80,6 +88,11 @@ export function startGPS(): void {
       gpsAvailable = true;
       gpsError = null;
       lastLiveFixTsMs = Date.now();
+=======
+  watchId = Geolocation.watchPosition(
+    position => {
+      gpsAvailable = true;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
       latestPosition = {
         lat: position.coords.latitude,
         lon: position.coords.longitude,
@@ -95,12 +108,21 @@ export function startGPS(): void {
     error => {
       // GPS signal lost or permission denied — degrade gracefully
       console.warn('GPS error code', error.code, ':', error.message);
+<<<<<<< HEAD
       markGPSUnavailable(error.message);
+=======
+      gpsAvailable = false;
+      notifyListeners(null);
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     },
     {
       enableHighAccuracy: true,
       timeout: 10000,
+<<<<<<< HEAD
       maximumAge: 30000,
+=======
+      maximumAge: 5000,
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
       distanceFilter: 0,
     },
   );
@@ -112,6 +134,7 @@ export function stopGPS(): void {
     watchId = null;
   }
   gpsAvailable = false;
+<<<<<<< HEAD
   gpsError = null;
   lastLiveFixTsMs = 0;
 }
@@ -127,6 +150,14 @@ export function getGPSError(): string | null {
   return gpsError;
 }
 
+=======
+}
+
+export function isGPSAvailable(): boolean {
+  return gpsAvailable;
+}
+
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 export function getLatestGPS(): GPSPosition | null {
   return latestPosition;
 }

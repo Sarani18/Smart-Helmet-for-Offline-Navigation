@@ -31,6 +31,7 @@ from .map_manager import MapManager
 from .offline_cache import OfflineCache
 from .route_processor import RouteProcessor
 from .route_progress import ProgressUpdate, RouteProgressEngine
+from .hardware_service import HardwareService
 
 
 class NavigationAPIService:
@@ -75,10 +76,23 @@ class NavigationAPIService:
         self._last_nav_hint_signature: Optional[tuple] = None
         self._active_session_id: Optional[str] = None
         self._route_polyline: List[tuple] = []
+        self._last_visual_event: Optional[Dict[str, Any]] = None
+        
+        self._current_pos: Optional[tuple] = None
+        self._current_heading: float = 0.0
+        self._uncertainty_m: float = 0.0
+        self._is_emergency: bool = False
 
         self._current_nav_mode: NavMode = NavMode.ONLINE
         self._last_mode_reason: str = "network_online"
         self._last_mode_transition_ts_ms: Optional[int] = None
+
+        # ESP32 Hardware Integration
+        self.hardware = HardwareService(esp32_ip="10.100.30.1")
+
+    def set_emergency_state(self, active: bool):
+        self._is_emergency = active
+        print(f"🚨 [EMERGENCY] Crash State toggled: {active}")
 
     async def ingest_visual_event(
         self,
@@ -100,6 +114,8 @@ class NavigationAPIService:
         updates: List[ProgressUpdate] = []
         if ingest.accepted:
             self._last_accepted_event_ts_ms = event.ts_ms
+            self._last_visual_event = payload  # Track the full payload for UI feedback
+            self._uncertainty_m = 0.0 # RESET DRIFT ON VISION CONFIRM
             for ready in self._pipeline.pop_ready(now_ts_ms):
                 update = self._progress.process_event(ready)
                 self._confidence.update_from_event(ready, update)
@@ -109,6 +125,15 @@ class NavigationAPIService:
         degraded_reason = mode_reason if nav_mode == NavMode.DEGRADED else None
         nav_hint = self._build_nav_hint(event.session_id, now_ts_ms)
         ui_state = self._build_ui_state(event.session_id, now_ts_ms)
+
+        # Trigger Hardware LEDs with Safety Guard
+        try:
+            await self.hardware.update_from_instruction(
+                ui_state.get("next_instruction_text", ""),
+                is_gps_failed=(nav_mode == NavMode.OFFLINE or nav_mode == NavMode.DEGRADED)
+            )
+        except Exception as e:
+            print(f"[Hardware Warning] Failed to reach ESP32: {e}")
 
         return {
             "accepted": ingest.accepted,
@@ -132,12 +157,60 @@ class NavigationAPIService:
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Async placeholder for future dead-reckoning integration API.
+        Ingest dead reckoning position and heading updates.
         """
-        _ = payload
+        lat = payload.get("lat")
+        lon = payload.get("lon")
+        heading = payload.get("heading", self._current_heading)
+        
+        if lat is not None and lon is not None:
+            # Calculate distance from last pos to increment uncertainty
+            if self._current_pos:
+                # Simpler approximation for drift: 2% of distance
+                # In real DR this comes from the IMU integration variance
+                self._uncertainty_m = min(self._uncertainty_m + 0.5, 50.0) # Constant drift per "ping" for sim, capped at 50m
+            self._current_pos = (float(lat), float(lon))
+            self._current_heading = float(heading)
+            
+            # Update progress engine with DR event
+            # This ensures instructions (turns/instructions) update as you move
+            from .contracts import EventMessage, LocalizationEventType, TurnPayload, TurnClass
+            mock_event = EventMessage(
+                session_id=payload.get("session_id", self._active_session_id or "default"),
+                event_id="dr_" + str(payload.get("ts_ms", self._now_ms())),
+                ts_ms=payload.get("ts_ms", self._now_ms()),
+                event_type=LocalizationEventType.TURN,
+                confidence=0.9,
+                payload=TurnPayload(turn_class=TurnClass.STRAIGHT), # Default to straight for DR updates
+                heading_deg=self._current_heading,
+                speed_mps=float(payload.get("speed_mps", 0.0))
+            )
+            
+            update = self._progress.process_event(mock_event)
+            self._confidence.update_from_event(mock_event, update)
+            
+            ui_state = self._build_ui_state(mock_event.session_id, mock_event.ts_ms)
+            
+            # Trigger Hardware LEDs with Safety Guard
+            try:
+                await self.hardware.update_from_instruction(
+                    ui_state.get("next_instruction_text", ""),
+                    is_gps_failed=True 
+                )
+            except Exception as e:
+                print(f"[Hardware Warning] Failed to reach ESP32 during DR: {e}")
+
+            return {
+                "accepted": True,
+                "current_pos": self._current_pos,
+                "heading": self._current_heading,
+                "active_step": self._progress.get_active_step_index(),
+                "ui_state": ui_state # Added for dashboard sync
+            }
+            
         return {
             "accepted": False,
-            "reason": "dead_reckoning_not_enabled",
+            "reason": "missing_lat_lon",
         }
 
     async def ingest_ui_action(
@@ -167,6 +240,7 @@ class NavigationAPIService:
             self._last_accepted_event_ts_ms = None
             self._last_nav_hint_signature = None
             self._route_polyline = []
+            self._last_visual_event = None
             self._active_session_id = action.session_id
             nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
             ui_state = self._build_ui_state(action.session_id, action.ts_ms)
@@ -219,6 +293,11 @@ class NavigationAPIService:
             self._last_nav_hint_signature = None
             self._active_session_id = action.session_id
             self._route_polyline = self._extract_route_polyline(route_data)
+            
+            # INITIALIZE POSITION TO START OF ROUTE
+            if self._route_polyline:
+                self._current_pos = self._route_polyline[0]
+                
             tile_prefetch = self._attempt_tile_prefetch(route_data, action.session_id)
 
             nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
@@ -431,43 +510,60 @@ class NavigationAPIService:
         return PositionMode.GPS
 
     def _build_ui_state(self, session_id: str, ts_ms: int) -> Dict[str, Any]:
-        degraded_reason = self._get_degraded_reason(ts_ms)
-        nav_mode = self._resolve_nav_mode(degraded_reason)
-        position_mode = self._resolve_position_mode()
+        try:
+            degraded_reason = self._get_degraded_reason(ts_ms)
+            nav_mode = self._resolve_nav_mode(degraded_reason)
+            position_mode = self._resolve_position_mode()
 
-        next_instruction = self._progress.get_next_instruction_text() or ""
-        distance_to_next = self._progress.get_distance_to_next_turn_m()
-        if distance_to_next is None:
-            distance_to_next = 0.0
+            # Use original Route Processor logic for the Blue Line
+            if self._progress.has_route():
+                instr = self._progress.get_next_instruction_text() or "Follow the Blue Line"
+                d_next = self._progress.get_distance_to_next_turn_m() or 0.0
+            else:
+                instr = "Starting Trip from Main Road..."
+                d_next = 0.0
 
-        state = UIStateMessage(
-            session_id=session_id,
-            ts_ms=ts_ms,
-            nav_mode=nav_mode,
-            position_mode=position_mode,
-            next_instruction_text=next_instruction,
-            distance_to_next_m=float(distance_to_next),
-            confidence=float(self._confidence.get_score()),
-            off_route_flag=False,
-            destination_reached_flag=self._progress.is_destination_reached(),
-            active_step_index=self._progress.get_active_step_index(),
-            route_polyline=list(self._route_polyline),
-        )
-        return {
-            "session_id": state.session_id,
-            "ts_ms": state.ts_ms,
-            "nav_mode": state.nav_mode.value,
-            "position_mode": state.position_mode.value,
-            "next_instruction_text": state.next_instruction_text,
-            "distance_to_next_m": state.distance_to_next_m,
-            "confidence": state.confidence,
-            "off_route_flag": state.off_route_flag,
-            "destination_reached_flag": state.destination_reached_flag,
-            "active_step_index": state.active_step_index,
-            "route_polyline": [list(item) for item in state.route_polyline],
-            "degraded": degraded_reason is not None,
-            "degraded_reason": degraded_reason,
-        }
+            state = UIStateMessage(
+                session_id=session_id,
+                ts_ms=ts_ms,
+                nav_mode=nav_mode,
+                position_mode=position_mode,
+                next_instruction_text=instr,
+                distance_to_next_m=float(d_next),
+                confidence=float(self._confidence.get_score()),
+                off_route_flag=False,
+                destination_reached_flag=self._progress.is_destination_reached(),
+                active_step_index=self._progress.get_active_step_index(),
+                route_polyline=list(self._route_polyline),
+                is_emergency=self._is_emergency
+            )
+
+            res = {
+                "session_id": state.session_id,
+                "ts_ms": state.ts_ms,
+                "nav_mode": state.nav_mode.value,
+                "position_mode": state.position_mode.value,
+                "next_instruction_text": state.next_instruction_text,
+                "distance_to_next_m": state.distance_to_next_m,
+                "confidence": state.confidence,
+                "off_route_flag": state.off_route_flag,
+                "destination_reached_flag": state.destination_reached_flag,
+                "active_step_index": state.active_step_index,
+                "route_polyline": [list(item) for item in state.route_polyline],
+                "degraded": degraded_reason is not None,
+                "degraded_reason": degraded_reason,
+                "is_emergency": state.is_emergency
+            }
+            if self._current_pos:
+                res["current_position"] = list(self._current_pos)
+                res["heading"] = self._current_heading
+                res["uncertainty_m"] = self._uncertainty_m
+            return res
+        except Exception as e:
+            import traceback
+            print(f"❌ [CRITICAL] UI State Builder Crashed: {e}")
+            traceback.print_exc()
+            return {"accepted": False, "error": str(e)}
 
     @staticmethod
     def _extract_route_polyline(route_data: Dict[str, Any]) -> List[tuple]:
@@ -699,6 +795,15 @@ class NavigationAPIService:
             ]
 
         return []
+
+    @staticmethod
+    def _calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Simple Pythagorean distance for demo purposes (small scale mapping)."""
+        import math
+        # Approx 111km per degree
+        dy = (lat2 - lat1) * 111000
+        dx = (lon2 - lon1) * 111000 * math.cos(math.radians(lat1))
+        return math.sqrt(dx**2 + dy**2)
 
     @staticmethod
     def _now_ms() -> int:

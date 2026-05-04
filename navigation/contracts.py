@@ -121,6 +121,7 @@ class UIStateMessage:
     destination_reached_flag: bool
     active_step_index: int
     route_polyline: List[Tuple[float, float]] = field(default_factory=list)
+    is_emergency: bool = False
 
 
 @dataclass(frozen=True)

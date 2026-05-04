@@ -11,9 +11,16 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file at startup
+load_dotenv()
 
 from .api_service import NavigationAPIService
 from .event_validator import ContractValidationError
@@ -103,11 +110,15 @@ def _parse_zoom_levels(raw: str) -> list[int]:
 app = FastAPI(title="Navigation Control System API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_parse_allowed_origins(os.getenv("NCS_CORS_ORIGINS", "*")),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 bridge = _build_bridge()
+
+# Mount the dedicated Demo Suite for the National Finals
+app.mount("/demo", StaticFiles(directory="Demo"), name="demo")
 
 
 def _raise_as_http(exc: Exception) -> None:
@@ -185,8 +196,43 @@ async def get_ui_state(payload: Dict[str, Any]) -> Dict[str, Any]:
         _raise_as_http(exc)
         raise
 
+@app.post("/api/navigation/emergency/crash")
+async def trigger_emergency_crash(payload: Dict[str, Any]) -> Dict[str, Any]:
+    active = payload.get("active", True)
+    bridge.set_emergency_state(active)
+    return {"status": "emergency_triggered", "active": active}
+
+@app.get("/simulator", response_class=HTMLResponse)
+async def get_simulator():
+    """Serve the Web HUD Simulator directly from the server."""
+    # Look for the simulator in the root directory relative to this file
+    path = Path(__file__).parent.parent / "HUD_Simulator.html"
+    if path.exists():
+        content = path.read_text()
+        # Inject API Key from .env
+        key = os.getenv("GOOGLE_MAPS_API_KEY", "")
+        return content.replace("GOOGLE_MAPS_API_KEY_PLACEHOLDER", key)
+    return "<h1>HUD_Simulator.html not found</h1>"
+
 
 if __name__ == "__main__":
     import uvicorn
+    import logging
+    
+    # Check for SSL certificates in the DR folder (reuse yesterday's setup)
+    # We search in localization/DR as that's where the user confirmed them
+    cert_file = Path(__file__).parent.parent / "localization" / "DR" / "cert.pem"
+    key_file = Path(__file__).parent.parent / "localization" / "DR" / "key.pem"
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    if cert_file.exists() and key_file.exists():
+        print(f"🚀 Starting Navigation Server on port 8000 (HTTPS)")
+        print(f"🌐 Mobile Simulator: https://192.168.1.5:8000/simulator")
+        uvicorn.run(
+            app, host="0.0.0.0", port=8000,
+            ssl_certfile=str(cert_file),
+            ssl_keyfile=str(key_file)
+        )
+    else:
+        print(f"🚩 Starting Navigation Server on port 8000 (HTTP)")
+        print(f"⚠️  Note: Sensor access on mobile requires HTTPS.")
+        uvicorn.run(app, host="0.0.0.0", port=8000)

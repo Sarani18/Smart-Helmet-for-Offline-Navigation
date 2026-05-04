@@ -1,8 +1,11 @@
 package com.smarthelmetnav
 
 import android.app.Application
+<<<<<<< HEAD
 import com.chaquo.python.android.AndroidPlatform
 import com.chaquo.python.Python
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -20,7 +23,12 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
+<<<<<<< HEAD
               add(SmartHelmetPythonPackage())
+=======
+              // Packages that cannot be autolinked yet can be added manually here, for example:
+              // add(MyReactNativePackage())
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
             }
 
         override fun getJSMainModuleName(): String = "index"
@@ -36,9 +44,12 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+<<<<<<< HEAD
     if (!Python.isStarted()) {
       Python.start(AndroidPlatform(this))
     }
+=======
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     SoLoader.init(this, false)
     if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
       // If you opted-in for the New Architecture, we load the native entry point for this app.

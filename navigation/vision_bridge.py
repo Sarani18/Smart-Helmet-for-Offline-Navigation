@@ -199,3 +199,6 @@ class NavigationVisionBridge:
                 "error": str(exc),
             }
             return result
+
+    def set_emergency_state(self, active: bool):
+        self._service.set_emergency_state(active)

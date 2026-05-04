@@ -1,4 +1,5 @@
 /**
+<<<<<<< HEAD
  * OSM tile cache for react-native-maps UrlTile.
  *
  * Key design: react-native-maps MapTileProvider.java (the native Android code behind UrlTile)
@@ -17,6 +18,17 @@ import type { LatLon } from './routeService';
 /** Plain filesystem path — no file:// prefix. Used both here and by UrlTile.tileCachePath. */
 export const TILE_CACHE_DIR = `${RNFS.DocumentDirectoryPath}/osm_tile_cache`;
 
+=======
+ * OSM tile downloader for offline map rendering.
+ * Downloads tiles for a route bounding box at zoom levels 14 and 15,
+ * saves them to DocumentDirectoryPath/offline_tiles/{z}/{x}/{y}.png.
+ * Max cache size ~200MB — evicts oldest tiles when exceeded.
+ */
+import RNFS from 'react-native-fs';
+import type {LatLon} from './routeService';
+
+const TILE_DIR = `${RNFS.DocumentDirectoryPath}/offline_tiles`;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 const OSM_TILE_URL = 'https://tile.openstreetmap.org';
 const MAX_CACHE_BYTES = 200 * 1024 * 1024; // 200 MB
 const DEFAULT_ZOOM_LEVELS = [14, 15];
@@ -29,6 +41,7 @@ export interface TileDownloadProgress {
 
 type ProgressCallback = (p: TileDownloadProgress) => void;
 
+<<<<<<< HEAD
 /**
  * Download tiles in a square area around a single point (e.g. current GPS location).
  * Saves in the same format as MapTileProvider.java: {TILE_CACHE_DIR}/{z}/{x}/{y} (no extension)
@@ -69,6 +82,11 @@ export async function downloadTilesAroundPoint(
     );
   }
   return progress;
+=======
+/** Returns the local file:// URI for a tile — used by MapView LocalTile. */
+export function getTileTemplate(): string {
+  return `file://${TILE_DIR}/{z}/{x}/{y}.png`;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 }
 
 /**
@@ -80,7 +98,11 @@ export async function downloadTilesForRoute(
   zoomLevels: number[] = DEFAULT_ZOOM_LEVELS,
   onProgress?: ProgressCallback,
 ): Promise<TileDownloadProgress> {
+<<<<<<< HEAD
   await ensureDir(TILE_CACHE_DIR);
+=======
+  await ensureDir(TILE_DIR);
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
   const bbox = computeBBox(polyline);
   const tileList = enumerateTiles(bbox, zoomLevels);
@@ -96,7 +118,11 @@ export async function downloadTilesForRoute(
   for (let i = 0; i < tileList.length; i += BATCH) {
     const batch = tileList.slice(i, i + BATCH);
     await Promise.all(
+<<<<<<< HEAD
       batch.map(async ({ z, x, y }) => {
+=======
+      batch.map(async ({z, x, y}) => {
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
         try {
           await downloadTile(z, x, y);
           progress.downloaded++;
@@ -144,9 +170,15 @@ function latLonToTile(lat: number, lon: number, zoom: number): TileCoord {
   const latRad = (lat * Math.PI) / 180;
   const y = Math.floor(
     ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+<<<<<<< HEAD
     n,
   );
   return { z: zoom, x, y };
+=======
+      n,
+  );
+  return {z: zoom, x, y};
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 }
 
 function enumerateTiles(bbox: BBox, zoomLevels: number[]): TileCoord[] {
@@ -156,7 +188,11 @@ function enumerateTiles(bbox: BBox, zoomLevels: number[]): TileCoord[] {
     const bottomRight = latLonToTile(bbox.minLat, bbox.maxLon, z);
     for (let x = topLeft.x; x <= bottomRight.x; x++) {
       for (let y = topLeft.y; y <= bottomRight.y; y++) {
+<<<<<<< HEAD
         tiles.push({ z, x, y });
+=======
+        tiles.push({z, x, y});
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
       }
     }
   }
@@ -164,10 +200,15 @@ function enumerateTiles(bbox: BBox, zoomLevels: number[]): TileCoord[] {
 }
 
 async function downloadTile(z: number, x: number, y: number): Promise<void> {
+<<<<<<< HEAD
   const dir = `${TILE_CACHE_DIR}/${z}/${x}`;
   // No .png extension — matches MapTileProvider.java getTileFilename() format:
   //   return tileCachePath + '/' + zoom + "/" + x + "/" + y;
   const path = `${dir}/${y}`;
+=======
+  const dir = `${TILE_DIR}/${z}/${x}`;
+  const path = `${dir}/${y}.png`;
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
   const exists = await RNFS.exists(path);
   if (exists) {
@@ -179,9 +220,13 @@ async function downloadTile(z: number, x: number, y: number): Promise<void> {
   await RNFS.downloadFile({
     fromUrl: url,
     toFile: path,
+<<<<<<< HEAD
     headers: { 'User-Agent': 'SmartHelmetNav/1.0' },
     connectionTimeout: 10000,
     readTimeout: 10000,
+=======
+    headers: {'User-Agent': 'SmartHelmetNav/1.0'},
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   }).promise;
 }
 
@@ -194,9 +239,15 @@ async function ensureDir(path: string): Promise<void> {
 
 async function trimCache(): Promise<void> {
   try {
+<<<<<<< HEAD
     const items = await RNFS.readDir(TILE_CACHE_DIR);
     // Get all png files recursively (simplified: scan z-level dirs)
     const files: { path: string; mtime: Date; size: number }[] = [];
+=======
+    const items = await RNFS.readDir(TILE_DIR);
+    // Get all png files recursively (simplified: scan z-level dirs)
+    const files: {path: string; mtime: Date; size: number}[] = [];
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     for (const item of items) {
       if (item.isDirectory()) {
         const zItems = await RNFS.readDir(item.path);

@@ -1,12 +1,23 @@
 /**
  * HomeScreen
  *
+<<<<<<< HEAD
  * Flow on "Start Navigation":
  *   1. Request Android permissions
  *   2. Check route cache (same origin+dest → skip all network, navigate instantly)
  *   3. Geocode via Nominatim (15s timeout)
  *   4. Fetch route via OSRM (15s timeout, cached to disk)
  *   5. Navigate immediately — tile download runs in background
+=======
+ * Rider enters origin and destination. On "Start Navigation":
+ *   1. Request Android permissions (location, BLE)
+ *   2. Geocode via Nominatim
+ *   3. Fetch route via OSRM and cache to disk
+ *   4. Download OSM tiles for the route bounding box (with progress)
+ *   5. Hand off to NavigationScreen
+ *
+ * No external server required — all logic runs on-device.
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
  */
 
 import React, {useState} from 'react';
@@ -22,6 +33,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+<<<<<<< HEAD
 import Geolocation from '@react-native-community/geolocation';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {requestApplicationPermissions} from '../utils/permissions';
@@ -33,6 +45,12 @@ import {
 } from '../services/routeService';
 import {downloadTilesForRoute} from '../services/tileService';
 import {startGPS} from '../services/gpsService';
+=======
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {requestApplicationPermissions} from '../utils/permissions';
+import {geocode, fetchRoute} from '../services/routeService';
+import {downloadTilesForRoute} from '../services/tileService';
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 import type {ParsedRoute, LatLon} from '../services/routeService';
 
 interface Props {
@@ -42,6 +60,7 @@ interface Props {
     origin: LatLon,
     dest: LatLon,
   ) => void;
+<<<<<<< HEAD
   onDemo: () => void;
 }
 
@@ -106,6 +125,22 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
       },
     );
   };
+=======
+}
+
+function makeSessionId(): string {
+  // Hardcoded for testing with the Python scripts
+  return 'test_mobile_session'; 
+}
+
+const HomeScreen: React.FC<Props> = ({onNavigationStarted}) => {
+  const insets = useSafeAreaInsets();
+  const [origin, setOrigin] = useState('VNIT Nagpur');
+  const [destination, setDestination] = useState('Nagpur Airport');
+  const [loading, setLoading] = useState(false);
+  const [statusText, setStatusText] = useState('');
+  const [tileProgress, setTileProgress] = useState<{d: number; t: number} | null>(null);
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
   const handleStart = async () => {
     if (!origin.trim() || !destination.trim()) {
@@ -114,10 +149,18 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
     }
 
     setLoading(true);
+<<<<<<< HEAD
     setStatusText('Checking permissions…');
 
     try {
       // Step 1: Permissions
+=======
+    setTileProgress(null);
+
+    try {
+      // Step 1: Permissions
+      setStatusText('Requesting permissions…');
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
       const perms = await requestApplicationPermissions();
       if (!perms.allCriticalGranted) {
         Alert.alert(
@@ -127,6 +170,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
         return;
       }
 
+<<<<<<< HEAD
       // Warm up GPS while route is being fetched — reduces cold-start delay on NavigationScreen
       startGPS();
 
@@ -175,6 +219,35 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
     } finally {
       setLoading(false);
       setStatusText('');
+=======
+      // Step 2: Geocode
+      setStatusText('Geocoding locations…');
+      const [originCoords, destCoords] = await Promise.all([
+        geocode(origin.trim()),
+        geocode(destination.trim()),
+      ]);
+
+      // Step 3: Fetch route from OSRM and cache
+      setStatusText('Fetching route from OSRM…');
+      const sessionId = makeSessionId();
+      const route = await fetchRoute(originCoords, destCoords, sessionId);
+
+      // Step 4: Download tiles for the route bounding box
+      setStatusText('Downloading offline map tiles…');
+      await downloadTilesForRoute(route.polyline, [14, 15], p => {
+        setTileProgress({d: p.downloaded, t: p.total});
+      });
+
+      // Step 5: Hand off
+      onNavigationStarted(sessionId, route, originCoords, destCoords);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert('Error', msg);
+    } finally {
+      setLoading(false);
+      setStatusText('');
+      setTileProgress(null);
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     }
   };
 
@@ -194,6 +267,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
 
         <View style={styles.card}>
           <Text style={styles.inputLabel}>FROM</Text>
+<<<<<<< HEAD
           <View style={styles.inputRow}>
             <TextInput
               style={[styles.input, styles.inputFlex]}
@@ -222,6 +296,17 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
               )}
             </Pressable>
           </View>
+=======
+          <TextInput
+            style={styles.input}
+            value={origin}
+            onChangeText={setOrigin}
+            placeholder="e.g. VNIT Nagpur"
+            placeholderTextColor="#aaa"
+            returnKeyType="next"
+            editable={!loading}
+          />
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
           <View style={styles.divider} />
           <Text style={styles.inputLabel}>TO</Text>
           <TextInput
@@ -238,16 +323,33 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
 
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
+<<<<<<< HEAD
             {'↳ Route cached after first fetch — retries are instant\n'}
             {'↳ Map tiles download in background after navigation starts\n'}
             {'↳ Works fully offline once route is cached'}
+=======
+            {'↳ Route fetched from OSRM (on first use)\n'}
+            {'↳ Map tiles downloaded and cached offline\n'}
+            {'↳ Navigation runs fully on-device — no server needed'}
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
           </Text>
         </View>
 
         {loading && (
           <View style={styles.statusRow}>
             <ActivityIndicator color="#1a73e8" />
+<<<<<<< HEAD
             <Text style={styles.statusText}>{statusText}</Text>
+=======
+            <View style={styles.statusTextCol}>
+              <Text style={styles.statusText}>{statusText}</Text>
+              {tileProgress && (
+                <Text style={styles.tileText}>
+                  Tiles: {tileProgress.d} / {tileProgress.t}
+                </Text>
+              )}
+            </View>
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
           </View>
         )}
 
@@ -260,6 +362,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
           onPress={handleStart}
           disabled={loading}>
           <Text style={styles.startButtonText}>
+<<<<<<< HEAD
             {loading ? 'Loading…' : '▶  Start Navigation'}
           </Text>
         </Pressable>
@@ -274,12 +377,20 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
           disabled={loading}>
           <Text style={styles.demoButtonText}>
             {'⬡  Demo Mode (CyberHub → IGI)'}
+=======
+            {loading ? 'Setting up…' : '▶  Start Navigation'}
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
           </Text>
         </Pressable>
 
         <Text style={styles.hint}>
+<<<<<<< HEAD
           First use requires internet for route + tiles.{'\n'}
           Same route loads instantly on retry.
+=======
+          Requires internet on first use to download route + tiles.{'\n'}
+          After that, works fully offline.
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -323,11 +434,21 @@ const styles = StyleSheet.create({
   infoText: {fontSize: 12, color: '#1a5276', lineHeight: 20},
   statusRow: {
     flexDirection: 'row',
+<<<<<<< HEAD
     alignItems: 'center',
     gap: 10,
     marginBottom: 12,
   },
   statusText: {fontSize: 13, color: '#555', flex: 1},
+=======
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  statusTextCol: {flexDirection: 'column'},
+  statusText: {fontSize: 13, color: '#555'},
+  tileText: {fontSize: 11, color: '#888', marginTop: 2},
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
   startButton: {
     backgroundColor: '#1a73e8',
     borderRadius: 14,
@@ -348,6 +469,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
+<<<<<<< HEAD
   demoButton: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -374,6 +496,9 @@ const styles = StyleSheet.create({
   locButtonPressed: {backgroundColor: '#1558b0'},
   locButtonDisabled: {backgroundColor: '#9dbfef'},
   locButtonText: {color: '#fff', fontSize: 12, fontWeight: '700'},
+=======
+  hint: {textAlign: 'center', fontSize: 11, color: '#aaa', lineHeight: 17},
+>>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 });
 
 export default HomeScreen;
