@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "SmartHelmetNav",
   "version": "0.0.1",
   "private": true,
@@ -24,6 +24,9 @@
     "@babel/core": "^7.20.0",
     "@babel/preset-env": "^7.20.0",
     "@babel/runtime": "^7.20.0",
+    "@react-native-community/cli": "12.3.7",
+    "@react-native-community/cli-platform-android": "12.3.7",
+    "@react-native-community/cli-platform-ios": "12.3.7",
     "@react-native/babel-preset": "0.73.21",
     "@react-native/eslint-config": "0.73.2",
     "@react-native/metro-config": "0.73.5",

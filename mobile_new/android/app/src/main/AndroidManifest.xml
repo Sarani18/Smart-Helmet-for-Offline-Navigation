@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
-    <!-- Bluetooth legacy (API ≤ 30) -->
+    <!-- Bluetooth legacy (API â‰¤ 30) -->
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
@@ -51,20 +51,12 @@
         </intent-filter>
       </activity>
 
-<<<<<<< HEAD
       <!-- Required by react-native-maps native init even when using OSM LocalTile.
            No real Google Maps tiles are fetched because mapType="none" in JS. -->
       <meta-data
         android:name="com.google.android.geo.API_KEY"
         android:value="placeholder" />
 
-=======
-      <!-- Background foreground service for BLE + navigation persistence -->
-      <service
-        android:name="com.asterinet.reaction.bgTask.RNBackgroundActionsTask"
-        android:foregroundServiceType="connectedDevice|location"
-        android:exported="false" />
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
 
     </application>
 </manifest>

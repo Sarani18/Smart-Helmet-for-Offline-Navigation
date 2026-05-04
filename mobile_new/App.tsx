@@ -1,5 +1,5 @@
-﻿/**
- * Smart Helmet Navigation â€” standalone app root.
+/**
+ * Smart Helmet Navigation - standalone app root.
  * Routes between HomeScreen (route setup) and NavigationScreen (live nav).
  */
 

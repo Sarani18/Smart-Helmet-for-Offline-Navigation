@@ -1,8 +1,8 @@
-﻿/**
+/**
  * Route service: geocoding via Nominatim, routing via OSRM, local caching via RNFS.
  *
  * Key behaviours:
- * - Cache-first: same origin+destination â†’ instant load from disk, no network hit
+ * - Cache-first: same origin+destination -> instant load from disk, no network hit
  * - 15s timeout on every fetch: never hangs, always throws a clear error
  * - Only needs network on first use for a given route
  */
@@ -12,7 +12,7 @@ const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 const CACHE_DIR = `${RNFS.DocumentDirectoryPath}/osrm_routes`;
 
-const FETCH_TIMEOUT_MS = 120000; // 30s â€” OSRM demo server can be slow
+const FETCH_TIMEOUT_MS = 120000; // 30s - OSRM demo server can be slow
 
 function isAbortError(e: unknown): boolean {
   return (
@@ -54,13 +54,13 @@ export async function geocode(placeName: string): Promise<LatLon> {
     );
   } catch (e: unknown) {
     if (isAbortError(e)) {
-      throw new Error('Geocoding timed out (30s) â€” check your internet connection and retry.');
+      throw new Error('Geocoding timed out (30s) - check your internet connection and retry.');
     }
     throw new Error(`Geocoding failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   if (!res.ok) {
-    throw new Error(`Nominatim returned ${res.status} â€” try again later.`);
+    throw new Error(`Nominatim returned ${res.status} - try again later.`);
   }
   const data = (await res.json()) as Array<{lat: string; lon: string}>;
   if (!data || data.length === 0) {
@@ -104,7 +104,7 @@ export async function fetchRoute(
   }
 
   if (!res.ok) {
-    throw new Error(`OSRM returned ${res.status} â€” try again later.`);
+    throw new Error(`OSRM returned ${res.status} - try again later.`);
   }
 
   const json = (await res.json()) as OSRMResponse;

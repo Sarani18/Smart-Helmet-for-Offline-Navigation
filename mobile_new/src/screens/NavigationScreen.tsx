@@ -1,16 +1,10 @@
-﻿/**
+/**
  * NavigationScreen
  *
- * Live navigation using MapLibre GL + OSM tiles â€” same map stack as the demo
- * and embedded/web_ui.  No Google Maps SDK required.
- *
- * On mount: starts GPS, IMU sensors, DR, BLE, and position coordinator.
- * Position coordinator feeds navigation engine every 500ms and sends map
- * updates (rider position, camera pan) to MapLibreView via postMessage.
- *
- * Sensor failure policy:
- *   GPS lost   â†’ DR mode (DEGRADED badge)
- *   All down   â†’ UNKNOWN badge + warning banner â€” app stays open, does NOT crash
+ * Live navigation using MapLibre GL + OSM tiles.
+ * The position coordinator acts as the app-side NCS layer:
+ * GPS drives the UI while available; when GPS is lost, NCS activates DR,
+ * marks Vision unavailable, and feeds DR coordinates back to the map.
  */
 
 import React, {useCallback, useEffect, useRef, useState} from 'react';
@@ -33,6 +27,7 @@ import {
   addPositionListener,
   type CoordinatorPosition,
   type PositionMode,
+  type VisionStatus,
 } from '../services/positionCoordinator';
 import {downloadTilesAroundPoint} from '../services/tileService';
 import MapLibreView from '../components/MapLibreView';
@@ -58,10 +53,13 @@ interface NavDisplay {
   offRoute: boolean;
   destinationReached: boolean;
   currentPos: LatLon | null;
+  drActive: boolean;
+  visionStatus: VisionStatus;
+  ncsStatus: string;
 }
 
 const INITIAL_NAV: NavDisplay = {
-  instruction: 'Acquiring positionâ€¦',
+  instruction: 'Acquiring position...',
   distanceM: 0,
   drDistanceTravelledM: 0,
   navMode: 'UNKNOWN',
@@ -69,6 +67,9 @@ const INITIAL_NAV: NavDisplay = {
   offRoute: false,
   destinationReached: false,
   currentPos: null,
+  drActive: false,
+  visionStatus: 'IDLE',
+  ncsStatus: 'Waiting for GPS',
 };
 
 const MODE_COLOR: Record<PositionMode, string> = {
@@ -98,12 +99,10 @@ const NavigationScreen: React.FC<Props> = ({
   const arrivedShown = useRef(false);
   const autoFollowMap = useRef(true);
 
-  // Pre-build route coords once ([lon, lat] for MapLibre)
   const routeCoords = useRef<[number, number][]>(
     route.polyline.map(p => [p.lon, p.lat]),
   );
 
-  // â”€â”€ map ready: draw route + origin/dest pins â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleMapReady = useCallback(() => {
     mapRef.current?.send({type: 'setRoute', coords: routeCoords.current});
     mapRef.current?.send({
@@ -124,7 +123,6 @@ const NavigationScreen: React.FC<Props> = ({
     });
   }, [origin, dest]);
 
-  // â”€â”€ position updates from coordinator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handlePosition = useCallback(
     (pos: CoordinatorPosition) => {
       if (pos.lat === 0 && pos.lon === 0 && pos.positionMode === 'UNKNOWN') {
@@ -132,8 +130,11 @@ const NavigationScreen: React.FC<Props> = ({
           ...prev,
           navMode: 'UNKNOWN',
           confidence: 0,
+          drActive: pos.drActive,
+          visionStatus: pos.visionStatus,
+          ncsStatus: pos.ncsStatus,
           drDistanceTravelledM: pos.drDistanceTravelledM,
-          instruction: 'No sensor data â€” check GPS and sensors',
+          instruction: 'No GPS or DR position yet',
         }));
         return;
       }
@@ -155,9 +156,11 @@ const NavigationScreen: React.FC<Props> = ({
         offRoute: state.offRoute,
         destinationReached: state.destinationReached,
         currentPos: {lat: pos.lat, lon: pos.lon},
+        drActive: pos.drActive,
+        visionStatus: pos.visionStatus,
+        ncsStatus: pos.ncsStatus,
       });
 
-      // Update rider dot on map
       mapRef.current?.send({
         type: 'setRider',
         lon: pos.lon,
@@ -165,7 +168,6 @@ const NavigationScreen: React.FC<Props> = ({
         color: MODE_COLOR[pos.positionMode],
       });
 
-      // Follow until the rider manually pans/zooms, then leave the map under user control.
       if (pos.positionMode !== 'UNKNOWN' && autoFollowMap.current) {
         mapRef.current?.send({
           type: 'flyTo',
@@ -175,13 +177,11 @@ const NavigationScreen: React.FC<Props> = ({
         });
       }
 
-      // Notify helmet via BLE
       if (bleService.isBLEConnected()) {
         bleService.sendNavInstruction(state.nextInstructionText, state.distanceToNextM);
         bleService.sendGPSStatus(pos.positionMode === 'GPS');
       }
 
-      // On first valid GPS fix, download tiles around current location for offline use
       if (!firstFixDone.current && pos.positionMode === 'GPS') {
         firstFixDone.current = true;
         downloadTilesAroundPoint({lat: pos.lat, lon: pos.lon}, 2, [14, 15]).catch(
@@ -189,7 +189,6 @@ const NavigationScreen: React.FC<Props> = ({
         );
       }
 
-      // Arrived alert â€” show once
       if (state.destinationReached && !arrivedShown.current) {
         arrivedShown.current = true;
         Alert.alert('Arrived!', 'You have reached your destination.', [
@@ -200,11 +199,9 @@ const NavigationScreen: React.FC<Props> = ({
     [onStop],
   );
 
-  // â”€â”€ service lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     navigationEngine.loadRoute(route);
     gpsService.startGPS();
-    sensorService.startSensors();
     startCoordinator();
 
     bleService.startBLE().catch(e =>
@@ -223,7 +220,6 @@ const NavigationScreen: React.FC<Props> = ({
       clearInterval(sensorStatusInterval);
       stopCoordinator();
       gpsService.stopGPS();
-      sensorService.stopSensors();
       bleService.stopBLE();
       navigationEngine.unloadRoute();
     };
@@ -251,9 +247,17 @@ const NavigationScreen: React.FC<Props> = ({
   const formatDistance = (meters: number): string =>
     meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${meters.toFixed(1)} m`;
 
+  const signalWarning =
+    nav.navMode === 'UNKNOWN'
+      ? sensorService.getSensorError()
+        ? `Sensor error: ${sensorService.getSensorError()}`
+        : gpsService.getGPSError()
+        ? `GPS unavailable: ${gpsService.getGPSError()}`
+        : nav.ncsStatus
+      : null;
+
   return (
     <View style={styles.container}>
-      {/* Full-screen MapLibre map â€” OSM tiles, same as demo and embedded web UI */}
       <MapLibreView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
@@ -264,27 +268,18 @@ const NavigationScreen: React.FC<Props> = ({
         onUserInteraction={handleMapInteraction}
       />
 
-      {/* No-signal warning (shown above instruction bar) */}
-      {nav.navMode === 'UNKNOWN' && (
+      {signalWarning && (
         <View style={styles.warningBanner}>
-          <Text style={styles.warningText}>
-            {sensorService.getSensorError()
-              ? `Sensor error: ${sensorService.getSensorError()}`
-              : gpsService.getGPSError()
-              ? `GPS unavailable: ${gpsService.getGPSError()}`
-              : 'No GPS or sensor data â€” check location permissions and sensors'}
-          </Text>
+          <Text style={styles.warningText}>{signalWarning}</Text>
         </View>
       )}
 
-      {/* Off-route warning */}
       {nav.offRoute && nav.navMode !== 'UNKNOWN' && (
         <View style={styles.offRouteBanner}>
-          <Text style={styles.warningText}>Off route â€” recalculatingâ€¦</Text>
+          <Text style={styles.warningText}>Off route - recalculating...</Text>
         </View>
       )}
 
-      {/* Top instruction bar */}
       <View style={[styles.instructionBar, {paddingTop: insets.top + 8}]}>
         <View style={styles.instructionRow}>
           <View
@@ -313,7 +308,6 @@ const NavigationScreen: React.FC<Props> = ({
           </Text>
         )}
 
-        {/* Confidence bar */}
         <View style={styles.confBarBg}>
           <View
             style={[
@@ -329,50 +323,55 @@ const NavigationScreen: React.FC<Props> = ({
           Confidence {Math.round(nav.confidence * 100)}%
         </Text>
 
-        <View style={styles.sensorPanel}>
-          <Text style={styles.sensorTitle}>
-            GPS {nav.navMode === 'GPS' ? 'ON' : 'OFF'} Â· Sensors{' '}
-            {latestIMU ? 'LIVE' : 'WAITING'}
-          </Text>
-          <Text style={styles.sensorStatusText} numberOfLines={1}>
-            {sensorStatus}
-          </Text>
-          <Text style={styles.drDistanceText}>
-            DR distance travelled {formatDistance(nav.drDistanceTravelledM)}
-          </Text>
-          <View style={styles.sensorGrid}>
-            <Text style={styles.sensorText}>
-              ACC x {latestIMU ? formatSensor(latestIMU.accel.x) : '--'}
+        {nav.drActive && (
+          <View style={styles.sensorPanel}>
+            <Text style={styles.sensorTitle}>
+              NCS fallback active
             </Text>
-            <Text style={styles.sensorText}>
-              y {latestIMU ? formatSensor(latestIMU.accel.y) : '--'}
+            <Text style={styles.sensorStatusText} numberOfLines={1}>
+              {nav.ncsStatus}
             </Text>
-            <Text style={styles.sensorText}>
-              z {latestIMU ? formatSensor(latestIMU.accel.z) : '--'}
+            <Text style={styles.sensorStatusText} numberOfLines={1}>
+              Vision: {nav.visionStatus === 'UNAVAILABLE' ? 'unavailable' : 'idle'}
             </Text>
+            <Text style={styles.drDistanceText}>
+              DR distance travelled {formatDistance(nav.drDistanceTravelledM)}
+            </Text>
+            <Text style={styles.sensorStatusText} numberOfLines={1}>
+              Sensors: {sensorStatus}
+            </Text>
+            <View style={styles.sensorGrid}>
+              <Text style={styles.sensorText}>
+                ACC x {latestIMU ? formatSensor(latestIMU.accel.x) : '--'}
+              </Text>
+              <Text style={styles.sensorText}>
+                y {latestIMU ? formatSensor(latestIMU.accel.y) : '--'}
+              </Text>
+              <Text style={styles.sensorText}>
+                z {latestIMU ? formatSensor(latestIMU.accel.z) : '--'}
+              </Text>
+            </View>
+            <View style={styles.sensorGrid}>
+              <Text style={styles.sensorText}>
+                GYR x {latestIMU ? formatSensor(latestIMU.gyro.x) : '--'}
+              </Text>
+              <Text style={styles.sensorText}>
+                y {latestIMU ? formatSensor(latestIMU.gyro.y) : '--'}
+              </Text>
+              <Text style={styles.sensorText}>
+                z {latestIMU ? formatSensor(latestIMU.gyro.z) : '--'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.sensorGrid}>
-            <Text style={styles.sensorText}>
-              GYR x {latestIMU ? formatSensor(latestIMU.gyro.x) : '--'}
-            </Text>
-            <Text style={styles.sensorText}>
-              y {latestIMU ? formatSensor(latestIMU.gyro.y) : '--'}
-            </Text>
-            <Text style={styles.sensorText}>
-              z {latestIMU ? formatSensor(latestIMU.gyro.z) : '--'}
-            </Text>
-          </View>
-        </View>
+        )}
       </View>
 
-      {/* Recenter button */}
       {nav.currentPos && (
         <Pressable style={styles.recenterButton} onPress={handleRecenter}>
-          <Text style={styles.recenterText}>{'\u2316'}</Text>
+          <Text style={styles.recenterText}>LOC</Text>
         </Pressable>
       )}
 
-      {/* Bottom stop button */}
       <View style={[styles.bottomPanel, {paddingBottom: insets.bottom + 16}]}>
         <Pressable
           style={({pressed}) => [
@@ -507,7 +506,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
-  recenterText: {fontSize: 24, color: '#1a73e8'},
+  recenterText: {fontSize: 12, color: '#1a73e8', fontWeight: '800'},
 
   bottomPanel: {
     position: 'absolute',

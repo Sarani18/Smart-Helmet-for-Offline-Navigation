@@ -15,10 +15,7 @@ buildscript {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
-<<<<<<< HEAD
         classpath("com.chaquo.python:gradle:15.0.1")
-=======
->>>>>>> be860fc410b7b5a186f80173c88073a6842371e3
     }
 }
 

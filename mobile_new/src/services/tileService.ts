@@ -1,12 +1,12 @@
-﻿/**
+/**
  * OSM tile cache for react-native-maps UrlTile.
  *
  * Key design: react-native-maps MapTileProvider.java (the native Android code behind UrlTile)
- * saves tiles as {tileCachePath}/{zoom}/{x}/{y}  â€” NO file extension.
+ * saves tiles as {tileCachePath}/{zoom}/{x}/{y}  - NO file extension.
  * It also reads from that same path before fetching the network.
  *
  * So we point UrlTile.tileCachePath at TILE_CACHE_DIR and the native layer handles
- * both online fetching AND offline serving â€” no RNFS download needed for basic use.
+ * both online fetching AND offline serving - no RNFS download needed for basic use.
  *
  * downloadTilesForRoute / downloadTilesAroundPoint use the same path convention so that
  * pre-fetched tiles are found by the native cache read.
@@ -14,7 +14,7 @@
 import RNFS from 'react-native-fs';
 import type { LatLon } from './routeService';
 
-/** Plain filesystem path â€” no file:// prefix. Used both here and by UrlTile.tileCachePath. */
+/** Plain filesystem path - no file:// prefix. Used both here and by UrlTile.tileCachePath. */
 export const TILE_CACHE_DIR = `${RNFS.DocumentDirectoryPath}/osm_tile_cache`;
 
 const OSM_TILE_URL = 'https://tile.openstreetmap.org';
@@ -165,7 +165,7 @@ function enumerateTiles(bbox: BBox, zoomLevels: number[]): TileCoord[] {
 
 async function downloadTile(z: number, x: number, y: number): Promise<void> {
   const dir = `${TILE_CACHE_DIR}/${z}/${x}`;
-  // No .png extension â€” matches MapTileProvider.java getTileFilename() format:
+  // No .png extension - matches MapTileProvider.java getTileFilename() format:
   //   return tileCachePath + '/' + zoom + "/" + x + "/" + y;
   const path = `${dir}/${y}`;
 

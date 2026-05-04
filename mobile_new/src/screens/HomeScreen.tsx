@@ -1,12 +1,12 @@
-﻿/**
+/**
  * HomeScreen
  *
  * Flow on "Start Navigation":
  *   1. Request Android permissions
- *   2. Check route cache (same origin+dest â†’ skip all network, navigate instantly)
- *   3. Geocode via Nominatim (15s timeout)
- *   4. Fetch route via OSRM (15s timeout, cached to disk)
- *   5. Navigate immediately â€” tile download runs in background
+ *   2. Check route cache (same origin+dest -> skip all network, navigate instantly)
+ *   3. Geocode via Nominatim
+ *   4. Fetch route via OSRM
+ *   5. Navigate immediately - tile download runs in background
  */
 
 import React, {useState} from 'react';
@@ -55,19 +55,17 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
   const [destination, setDestination] = useState('MIT World Peace University, Pune');
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
-  // When user taps "My Location", we store the raw coords to skip geocoding
   const [originCoords, setOriginCoords] = useState<LatLon | null>(null);
   const [fetchingLoc, setFetchingLoc] = useState(false);
 
   const handleUseMyLocation = async () => {
     setFetchingLoc(true);
-    setOrigin('Fetching GPSâ€¦');
+    setOrigin('Fetching GPS...');
     setOriginCoords(null);
 
-    // Ensure location permission is granted before calling GPS API
     const perms = await requestApplicationPermissions();
     if (!perms.fineLocation) {
-      setOrigin('VNIT Nagpur');
+      setOrigin('Pune Airport');
       setOriginCoords(null);
       setFetchingLoc(false);
       Alert.alert(
@@ -84,14 +82,12 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
           lon: pos.coords.longitude,
         };
         setOriginCoords(coords);
-        // Show rounded coords as a readable label
-        const label = `${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`;
-        setOrigin(label);
+        setOrigin(`${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`);
         setFetchingLoc(false);
       },
       err => {
         console.warn('getCurrentPosition failed:', err.code, err.message);
-        setOrigin('VNIT Nagpur'); // revert to default
+        setOrigin('Pune Airport');
         setOriginCoords(null);
         setFetchingLoc(false);
         Alert.alert(
@@ -101,7 +97,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 60000, // 60s â€” try hard to get a fix
+        timeout: 60000,
         maximumAge: 10000,
       },
     );
@@ -114,10 +110,9 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
     }
 
     setLoading(true);
-    setStatusText('Checking permissionsâ€¦');
+    setStatusText('Checking permissions...');
 
     try {
-      // Step 1: Permissions
       const perms = await requestApplicationPermissions();
       if (!perms.allCriticalGranted) {
         Alert.alert(
@@ -127,20 +122,16 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
         return;
       }
 
-      // Warm up GPS while route is being fetched â€” reduces cold-start delay on NavigationScreen
       startGPS();
 
       const sessionId = makeSessionId();
       const cacheKey = makeRouteCacheKey(origin.trim(), destination.trim());
 
-      // Step 2: Try cache first â€” no network needed
-      setStatusText('Checking local cacheâ€¦');
+      setStatusText('Checking local cache...');
       const cached = await loadCachedRoute(cacheKey);
       if (cached) {
-        // Need coordinates for the map markers â€” geocode quickly (or use route endpoints)
         const firstPt = cached.polyline[0];
         const lastPt = cached.polyline[cached.polyline.length - 1];
-        // Kick off background tile download (non-blocking)
         downloadTilesForRoute(cached.polyline, [14, 15]).catch(e =>
           console.warn('Background tile download failed:', e),
         );
@@ -148,27 +139,18 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
         return;
       }
 
-      // Step 3: Geocode (only destination if current-location was used for origin)
-      setStatusText('Geocoding locationsâ€¦');
-      let resolvedOrigin: LatLon;
-      if (originCoords) {
-        resolvedOrigin = originCoords; // already have GPS coords â€” skip geocoding
-      } else {
-        resolvedOrigin = await geocode(origin.trim());
-      }
+      setStatusText('Geocoding locations...');
+      const resolvedOrigin = originCoords ?? (await geocode(origin.trim()));
       const destCoords = await geocode(destination.trim());
 
-      // Step 4: Fetch route from OSRM
-      setStatusText('Fetching route from OSRMâ€¦ (may take up to 2 min)');
+      setStatusText('Fetching route from OSRM... (may take up to 2 min)');
       const route = await fetchRoute(resolvedOrigin, destCoords, sessionId, cacheKey);
 
-      // Step 5: Navigate immediately â€” tiles download in background
-      setStatusText('Starting navigationâ€¦');
+      setStatusText('Starting navigation...');
       downloadTilesForRoute(route.polyline, [14, 15]).catch(e =>
         console.warn('Background tile download failed:', e),
       );
       onNavigationStarted(sessionId, route, resolvedOrigin, destCoords);
-
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       Alert.alert('Could not start navigation', msg);
@@ -188,7 +170,6 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
           {paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24},
         ]}
         keyboardShouldPersistTaps="handled">
-
         <Text style={styles.title}>Smart Helmet</Text>
         <Text style={styles.subtitle}>Standalone Offline Navigation</Text>
 
@@ -200,9 +181,9 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
               value={origin}
               onChangeText={text => {
                 setOrigin(text);
-                setOriginCoords(null); // clear saved coords when user types
+                setOriginCoords(null);
               }}
-              placeholder="e.g. VNIT Nagpur"
+              placeholder="e.g. Pune Airport"
               placeholderTextColor="#aaa"
               returnKeyType="next"
               editable={!loading && !fetchingLoc}
@@ -218,7 +199,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
               {fetchingLoc ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.locButtonText}>{'\u25CE'} Me</Text>
+                <Text style={styles.locButtonText}>Me</Text>
               )}
             </Pressable>
           </View>
@@ -228,7 +209,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
             style={styles.input}
             value={destination}
             onChangeText={setDestination}
-            placeholder="e.g. Nagpur Airport"
+            placeholder="e.g. MIT WPU"
             placeholderTextColor="#aaa"
             returnKeyType="done"
             onSubmitEditing={handleStart}
@@ -238,9 +219,9 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
 
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            {'â†³ Route cached after first fetch â€” retries are instant\n'}
-            {'â†³ Map tiles download in background after navigation starts\n'}
-            {'â†³ Works fully offline once route is cached'}
+            {'Route cached after first fetch - retries are instant\n'}
+            {'Map tiles download in background after navigation starts\n'}
+            {'Works fully offline once route is cached'}
           </Text>
         </View>
 
@@ -260,7 +241,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
           onPress={handleStart}
           disabled={loading}>
           <Text style={styles.startButtonText}>
-            {loading ? 'Loadingâ€¦' : 'â–¶  Start Navigation'}
+            {loading ? 'Loading...' : 'Start Navigation'}
           </Text>
         </Pressable>
 
@@ -273,7 +254,7 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
           onPress={onDemo}
           disabled={loading}>
           <Text style={styles.demoButtonText}>
-            {'â¬¡  Demo Mode (CyberHub â†’ IGI)'}
+            {'Demo Mode (CyberHub -> IGI)'}
           </Text>
         </Pressable>
 

@@ -1,7 +1,7 @@
-﻿/**
+/**
  * GPS service using @react-native-community/geolocation.
  * Graceful degradation: if GPS unavailable, sets gpsAvailable=false
- * and notifies listeners â€” does NOT throw or crash the app.
+ * and notifies listeners - does NOT throw or crash the app.
  */
 import Geolocation from '@react-native-community/geolocation';
 
@@ -71,7 +71,7 @@ export function startGPS(): void {
         notifyListeners(latestPosition);
       }
     },
-    () => {/* no cached position available â€” watchPosition will provide the first fix */},
+    () => {/* no cached position available - watchPosition will provide the first fix */},
     {enableHighAccuracy: false, timeout: 2000, maximumAge: 300000},
   );
 
@@ -93,7 +93,7 @@ export function startGPS(): void {
       notifyListeners(latestPosition);
     },
     error => {
-      // GPS signal lost or permission denied â€” degrade gracefully
+      // GPS signal lost or permission denied - degrade gracefully
       console.warn('GPS error code', error.code, ':', error.message);
       markGPSUnavailable(error.message);
     },

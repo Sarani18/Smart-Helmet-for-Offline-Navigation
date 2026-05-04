@@ -1,5 +1,5 @@
-﻿/**
- * Dead Reckoning service â€” delegates to Python dead_reckoning.py via Chaquopy.
+/**
+ * Dead Reckoning service - delegates to Python dead_reckoning.py via Chaquopy.
  * Keeps the same exported API as the previous TS port so positionCoordinator
  * needs no changes.
  */
@@ -53,6 +53,11 @@ export function isAnchored(): boolean {
 
 export function getDistanceTravelledMeters(): number {
   return distanceTravelledMeters;
+}
+
+export function resetDistanceTravelled(): void {
+  distanceTravelledMeters = 0;
+  lastUpdateTsMs = null;
 }
 
 export function reset(): void {

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * IMU sensor service using react-native-sensors@7.3.0 (bridge-based, old arch).
  * Samples accelerometer + gyroscope at 10Hz (100ms interval).
  * Graceful degradation: logs warning if sensors unavailable, does not crash.
@@ -200,7 +200,7 @@ export function startSensors(): void {
       },
       error: (e: unknown) => {
         const msg = String(e);
-        console.warn('Accelerometer unavailable â€” DR heading will be skipped:', msg);
+        console.warn('Accelerometer unavailable - DR heading will be skipped:', msg);
         accelActive = false;
         sensorsAvailable = gyroActive;
         sensorError = `Accelerometer: ${msg}`;
@@ -227,7 +227,7 @@ export function startSensors(): void {
     });
   } catch (e) {
     const msg = String(e);
-    console.warn('Sensors unavailable â€” DR heading will be skipped:', msg);
+    console.warn('Sensors unavailable - DR heading will be skipped:', msg);
     sensorsAvailable = false;
     accelActive = false;
     gyroActive = false;
