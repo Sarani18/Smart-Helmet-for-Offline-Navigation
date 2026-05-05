@@ -49,7 +49,6 @@ let routeStartTs = 0;
 // Route summary (filled on confirmNavStart so we know origin/dest names)
 let routeMeta = { origin: '—', destination: '—', totalDistanceM: 0 };
 let tripStartTs = null;
-let arrivalShown = false;
 
 // Heading-rate buffer for honest IMU graph (last 200 samples)
 const HDG_BUF_LEN = 200;
