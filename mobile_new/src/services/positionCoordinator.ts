@@ -1,21 +1,35 @@
 /**
  * Position coordinator.
  *
- * This is the app-side NCS handoff layer:
+ * App-side NCS handoff layer:
  *   1. GPS available -> use GPS and keep route progress anchored.
  *   2. GPS lost -> activate DR and request Vision.
- *   3. Vision is unavailable for now.
- *   4. DR contributes distance only; NCS projects that distance onto the route.
+ *   3. DR contributes distance; NCS projects that distance onto the route.
+ *   4. Vision is optional; when healthy, NCS accepts its route position hint.
  */
 import * as gpsService from './gpsService';
 import * as sensorService from './sensorService';
 import * as deadReckoningService from './deadReckoningService';
 import * as headingService from './headingService';
 import * as navigationEngine from './navigationEngine';
+import * as visionService from './visionService';
+import type {VisionResponse} from './visionService';
 import type {LatLon} from './routeService';
 
 export type PositionMode = 'GPS' | 'DR' | 'UNKNOWN';
-export type VisionStatus = 'IDLE' | 'UNAVAILABLE';
+export type VisionStatus =
+  | 'IDLE'
+  | 'CONNECTING'
+  | 'ACTIVE'
+  | 'DEGRADED'
+  | 'UNAVAILABLE';
+
+export interface CoordinatorConfig {
+  sessionId: string;
+  origin: LatLon;
+  destination: LatLon;
+  routePolyline: LatLon[];
+}
 
 export interface CoordinatorPosition {
   lat: number;
@@ -24,6 +38,7 @@ export interface CoordinatorPosition {
   confidence: number;
   drActive: boolean;
   visionStatus: VisionStatus;
+  visionMessage: string;
   ncsStatus: string;
   drDistanceTravelledM: number;
   routeProgressM: number;
@@ -35,6 +50,7 @@ type PositionListener = (pos: CoordinatorPosition) => void;
 const listeners: Set<PositionListener> = new Set();
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let removeIMUListener: (() => void) | null = null;
+let coordinatorConfig: CoordinatorConfig | null = null;
 let lastTs = 0;
 let fallbackActive = false;
 let lastKnownSpeedMps = 0;
@@ -42,6 +58,14 @@ let lastRouteProgressM = 0;
 let fallbackStartRouteProgressM = 0;
 let lastFallbackEmitProgressM = -Infinity;
 let lastFallbackEmitTsMs = 0;
+let lastEmittedVisionStatus: VisionStatus = 'IDLE';
+let lastEmittedVisionMessage = '';
+
+let visionStatus: VisionStatus = 'IDLE';
+let visionMessage = 'Vision idle';
+let latestVisionResponse: VisionResponse | null = null;
+let visionRequestInFlight = false;
+let lastVisionRequestTsMs = 0;
 
 const FALLBACK_SPEED_MPS = 1.5;
 const MIN_MOVING_GPS_SPEED_MPS = 0.5;
@@ -50,18 +74,26 @@ const ACCEL_MOTION_THRESHOLD_MPS2 = 0.45;
 const GYRO_MOTION_THRESHOLD_RADPS = 0.08;
 const DR_ROUTE_CHECKPOINT_M = 25;
 const DR_ROUTE_CHECKPOINT_MS = 2500;
+const VISION_POLL_MS = 3500;
+const VISION_STALE_MS = 10000;
+const MIN_VISION_CONFIDENCE = 0.45;
 
-export function startCoordinator(): void {
+export function startCoordinator(config?: CoordinatorConfig): void {
   if (intervalId !== null) {
     return;
   }
 
+  coordinatorConfig = config ?? null;
   fallbackActive = false;
   lastKnownSpeedMps = 0;
   lastRouteProgressM = 0;
   fallbackStartRouteProgressM = 0;
   lastFallbackEmitProgressM = -Infinity;
   lastFallbackEmitTsMs = 0;
+  lastEmittedVisionStatus = 'IDLE';
+  lastEmittedVisionMessage = '';
+  resetVisionState();
+
   try {
     deadReckoningService.reset();
     headingService.resetHeading();
@@ -94,6 +126,7 @@ export function stopCoordinator(): void {
   removeIMUListener = null;
   fallbackActive = false;
   sensorService.stopSensors();
+  stopVision();
   listeners.clear();
 }
 
@@ -102,7 +135,7 @@ export function addPositionListener(listener: PositionListener): () => void {
   return () => listeners.delete(listener);
 }
 
-function enterFallback(): void {
+function enterFallback(now: number): void {
   if (fallbackActive) {
     return;
   }
@@ -119,6 +152,7 @@ function enterFallback(): void {
     console.warn('NCS fallback init failed:', e);
   }
   sensorService.startSensors();
+  startVision(routePoint, now);
 }
 
 function leaveFallback(): void {
@@ -127,12 +161,120 @@ function leaveFallback(): void {
   }
   fallbackActive = false;
   sensorService.stopSensors();
+  stopVision();
   try {
     deadReckoningService.resetDistanceTravelled();
     headingService.resetHeading();
   } catch (e) {
     console.warn('NCS fallback stop failed:', e);
   }
+}
+
+function startVision(routePoint: LatLon, now: number): void {
+  if (!coordinatorConfig) {
+    visionStatus = 'UNAVAILABLE';
+    visionMessage = 'Vision not configured for this navigation session';
+    return;
+  }
+  visionStatus = 'CONNECTING';
+  visionMessage = 'Connecting to Vision server';
+  latestVisionResponse = null;
+  visionRequestInFlight = true;
+  lastVisionRequestTsMs = now;
+
+  visionService
+    .startVisionSession({
+      session_id: coordinatorConfig.sessionId,
+      origin: coordinatorConfig.origin,
+      destination: coordinatorConfig.destination,
+      current: routePoint,
+      route_polyline: getRoutePolylineForVision(),
+      route_progress_m: fallbackStartRouteProgressM,
+      heading_deg: currentHeadingDeg(),
+    })
+    .then(applyVisionResponse)
+    .catch(e => {
+      visionStatus = 'UNAVAILABLE';
+      visionMessage = `Vision start failed: ${String(e)}`;
+    })
+    .finally(() => {
+      visionRequestInFlight = false;
+    });
+}
+
+function stopVision(): void {
+  if (coordinatorConfig) {
+    void visionService.stopVisionSession(coordinatorConfig.sessionId);
+  }
+  resetVisionState();
+}
+
+function resetVisionState(): void {
+  visionStatus = 'IDLE';
+  visionMessage = 'Vision idle';
+  latestVisionResponse = null;
+  visionRequestInFlight = false;
+  lastVisionRequestTsMs = 0;
+}
+
+function maybeRequestVisionUpdate(
+  routePoint: LatLon,
+  routeProgressM: number,
+  drDistanceM: number,
+  now: number,
+): void {
+  if (!fallbackActive || !coordinatorConfig || visionRequestInFlight) {
+    return;
+  }
+  if (now - lastVisionRequestTsMs < VISION_POLL_MS) {
+    return;
+  }
+
+  visionRequestInFlight = true;
+  lastVisionRequestTsMs = now;
+  visionService
+    .updateVisionSession({
+      session_id: coordinatorConfig.sessionId,
+      current: routePoint,
+      route_polyline: getRoutePolylineForVision(),
+      route_progress_m: routeProgressM,
+      dr_distance_travelled_m: drDistanceM,
+      heading_deg: currentHeadingDeg(),
+    })
+    .then(applyVisionResponse)
+    .catch(e => {
+      visionStatus = 'UNAVAILABLE';
+      visionMessage = `Vision update failed: ${String(e)}`;
+    })
+    .finally(() => {
+      visionRequestInFlight = false;
+    });
+}
+
+function applyVisionResponse(response: VisionResponse): void {
+  latestVisionResponse = response;
+  if (response.status === 'OK') {
+    visionStatus = 'ACTIVE';
+  } else if (response.status === 'DEGRADED') {
+    visionStatus = 'DEGRADED';
+  } else if (response.status === 'STOPPED') {
+    visionStatus = 'IDLE';
+  } else {
+    visionStatus = 'UNAVAILABLE';
+  }
+  visionMessage = response.message || response.status;
+}
+
+function currentHeadingDeg(): number | undefined {
+  return headingService.isHeadingInitialized()
+    ? headingService.getHeading()
+    : undefined;
+}
+
+function getRoutePolylineForVision(): LatLon[] {
+  return coordinatorConfig?.routePolyline.length
+    ? coordinatorConfig.routePolyline
+    : navigationEngine.getRoutePolyline();
 }
 
 function hasMotionEvidence(imu: sensorService.IMUReading | null): boolean {
@@ -166,10 +308,20 @@ function shouldEmitFallbackCheckpoint(progressM: number, now: number): boolean {
   if (lastFallbackEmitProgressM === -Infinity) {
     return true;
   }
+  const statusChanged =
+    visionStatus !== lastEmittedVisionStatus ||
+    visionMessage !== lastEmittedVisionMessage;
   const movedEnough =
     Math.abs(progressM - lastFallbackEmitProgressM) >= DR_ROUTE_CHECKPOINT_M;
   const waitedEnough = now - lastFallbackEmitTsMs >= DR_ROUTE_CHECKPOINT_MS;
-  return movedEnough && waitedEnough;
+  return statusChanged || (movedEnough && waitedEnough);
+}
+
+function rememberFallbackEmit(progressM: number, now: number): void {
+  lastFallbackEmitProgressM = progressM;
+  lastFallbackEmitTsMs = now;
+  lastEmittedVisionStatus = visionStatus;
+  lastEmittedVisionMessage = visionMessage;
 }
 
 function resolvePosition(): void {
@@ -196,6 +348,7 @@ function resolvePosition(): void {
       confidence: Math.max(0, 1 - gps.accuracy / 50),
       drActive: false,
       visionStatus: 'IDLE',
+      visionMessage: 'Vision idle',
       ncsStatus: 'GPS active',
       drDistanceTravelledM: 0,
       routeProgressM: lastRouteProgressM,
@@ -204,10 +357,11 @@ function resolvePosition(): void {
     return;
   }
 
-  enterFallback();
+  enterFallback(now);
 
   const imu = sensorService.getLatestIMU();
   const imuAvailable = sensorService.isSensorsAvailable();
+
   if (imuAvailable && deadReckoningService.isAnchored()) {
     if (imu && headingService.isHeadingInitialized()) {
       try {
@@ -220,26 +374,38 @@ function resolvePosition(): void {
         console.warn('DR update failed:', e);
       }
     }
+  }
 
-    const drDistanceM = deadReckoningService.getDistanceTravelledMeters();
-    const routeProgressM = fallbackStartRouteProgressM + drDistanceM;
-    const routePoint = getPointAtRouteProgress(routeProgressM);
+  const drDistanceM = deadReckoningService.getDistanceTravelledMeters();
+  let routeProgressM = fallbackStartRouteProgressM + drDistanceM;
+  let routePoint = getPointAtRouteProgress(routeProgressM);
+  maybeRequestVisionUpdate(routePoint, routeProgressM, drDistanceM, now);
+
+  const visionFusion = getUsableVisionFusion(now);
+  if (visionFusion) {
+    routePoint = visionFusion.point;
+    routeProgressM = visionFusion.routeProgressM;
     lastRouteProgressM = routeProgressM;
+    fallbackStartRouteProgressM = routeProgressM - drDistanceM;
+  } else {
+    lastRouteProgressM = routeProgressM;
+  }
 
+  if ((imuAvailable && deadReckoningService.isAnchored()) || visionFusion) {
     if (!shouldEmitFallbackCheckpoint(routeProgressM, now)) {
       return;
     }
 
-    lastFallbackEmitProgressM = routeProgressM;
-    lastFallbackEmitTsMs = now;
+    rememberFallbackEmit(routeProgressM, now);
     emit({
       lat: routePoint.lat,
       lon: routePoint.lon,
       positionMode: 'DR',
-      confidence: 0.72,
+      confidence: visionFusion ? visionFusion.confidence : 0.72,
       drActive: true,
-      visionStatus: 'UNAVAILABLE',
-      ncsStatus: 'GPS lost - NCS using DR distance on route; Vision unavailable',
+      visionStatus,
+      visionMessage,
+      ncsStatus: buildFallbackStatus(Boolean(visionFusion)),
       drDistanceTravelledM: drDistanceM,
       routeProgressM,
       ts_ms: now,
@@ -247,21 +413,70 @@ function resolvePosition(): void {
     return;
   }
 
-  const routePoint = getPointAtRouteProgress(lastRouteProgressM);
+  if (!shouldEmitFallbackCheckpoint(lastRouteProgressM, now)) {
+    return;
+  }
+  rememberFallbackEmit(lastRouteProgressM, now);
   emit({
     lat: routePoint.lat,
     lon: routePoint.lon,
     positionMode: 'UNKNOWN',
     confidence: 0,
     drActive: fallbackActive,
-    visionStatus: 'UNAVAILABLE',
+    visionStatus,
+    visionMessage,
     ncsStatus: sensorService.getSensorError()
-      ? `DR unavailable: ${sensorService.getSensorError()}`
-      : 'GPS lost - waiting for DR sensor data; Vision unavailable',
-    drDistanceTravelledM: deadReckoningService.getDistanceTravelledMeters(),
+      ? `DR unavailable: ${sensorService.getSensorError()}; ${visionMessage}`
+      : `GPS lost - waiting for DR sensor data; ${visionMessage}`,
+    drDistanceTravelledM: drDistanceM,
     routeProgressM: lastRouteProgressM,
     ts_ms: now,
   });
+}
+
+function getUsableVisionFusion(
+  now: number,
+): {point: LatLon; routeProgressM: number; confidence: number} | null {
+  const response = latestVisionResponse;
+  if (!response || now - response.ts_ms > VISION_STALE_MS) {
+    return null;
+  }
+  if (
+    response.status !== 'OK' &&
+    response.status !== 'DEGRADED'
+  ) {
+    return null;
+  }
+  if (!response.position_hint || response.confidence < MIN_VISION_CONFIDENCE) {
+    return null;
+  }
+  const {lat, lon, route_progress_m} = response.position_hint;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  return {
+    point: {lat, lon},
+    routeProgressM: Number.isFinite(route_progress_m)
+      ? route_progress_m
+      : lastRouteProgressM,
+    confidence: Math.max(0.72, response.confidence),
+  };
+}
+
+function buildFallbackStatus(usedVision: boolean): string {
+  if (usedVision && visionStatus === 'ACTIVE') {
+    return 'GPS lost - NCS fused DR + Vision';
+  }
+  if (usedVision && visionStatus === 'DEGRADED') {
+    return 'GPS lost - NCS using DR + degraded Vision';
+  }
+  if (visionStatus === 'CONNECTING') {
+    return 'GPS lost - NCS activated DR; connecting to Vision';
+  }
+  if (visionStatus === 'UNAVAILABLE') {
+    return `GPS lost - NCS using DR; Vision unavailable (${visionMessage})`;
+  }
+  return 'GPS lost - NCS using DR distance on route';
 }
 
 function getPointAtRouteProgress(progressM: number): LatLon {
@@ -329,19 +544,15 @@ function projectPointOnSegment(
   const originLatRad = (a.lat * Math.PI) / 180;
   const metresPerDegLat = 111_320;
   const metresPerDegLon = 111_320 * Math.cos(originLatRad);
-  const ax = 0;
-  const ay = 0;
   const bx = (b.lon - a.lon) * metresPerDegLon;
   const by = (b.lat - a.lat) * metresPerDegLat;
   const px = (point.lon - a.lon) * metresPerDegLon;
   const py = (point.lat - a.lat) * metresPerDegLat;
-  const vx = bx - ax;
-  const vy = by - ay;
-  const lengthSq = vx * vx + vy * vy;
+  const lengthSq = bx * bx + by * by;
   const t =
-    lengthSq <= 0 ? 0 : Math.max(0, Math.min(1, (px * vx + py * vy) / lengthSq));
-  const projX = ax + vx * t;
-  const projY = ay + vy * t;
+    lengthSq <= 0 ? 0 : Math.max(0, Math.min(1, (px * bx + py * by) / lengthSq));
+  const projX = bx * t;
+  const projY = by * t;
   return {
     point: {
       lat: a.lat + (b.lat - a.lat) * t,

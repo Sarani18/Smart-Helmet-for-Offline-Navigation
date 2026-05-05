@@ -55,6 +55,7 @@ interface NavDisplay {
   currentPos: LatLon | null;
   drActive: boolean;
   visionStatus: VisionStatus;
+  visionMessage: string;
   ncsStatus: string;
 }
 
@@ -69,6 +70,7 @@ const INITIAL_NAV: NavDisplay = {
   currentPos: null,
   drActive: false,
   visionStatus: 'IDLE',
+  visionMessage: 'Vision idle',
   ncsStatus: 'Waiting for GPS',
 };
 
@@ -84,7 +86,7 @@ const MODE_LABEL: Record<PositionMode, string> = {
 };
 
 const NavigationScreen: React.FC<Props> = ({
-  sessionId: _sessionId,
+  sessionId,
   route,
   origin,
   dest,
@@ -132,6 +134,7 @@ const NavigationScreen: React.FC<Props> = ({
           confidence: 0,
           drActive: pos.drActive,
           visionStatus: pos.visionStatus,
+          visionMessage: pos.visionMessage,
           ncsStatus: pos.ncsStatus,
           drDistanceTravelledM: pos.drDistanceTravelledM,
           instruction: 'No GPS or DR position yet',
@@ -158,6 +161,7 @@ const NavigationScreen: React.FC<Props> = ({
         currentPos: {lat: pos.lat, lon: pos.lon},
         drActive: pos.drActive,
         visionStatus: pos.visionStatus,
+        visionMessage: pos.visionMessage,
         ncsStatus: pos.ncsStatus,
       });
 
@@ -202,7 +206,12 @@ const NavigationScreen: React.FC<Props> = ({
   useEffect(() => {
     navigationEngine.loadRoute(route);
     gpsService.startGPS();
-    startCoordinator();
+    startCoordinator({
+      sessionId,
+      origin,
+      destination: dest,
+      routePolyline: route.polyline,
+    });
 
     bleService.startBLE().catch(e =>
       console.warn('BLE start failed (navigation continues):', e),
@@ -332,7 +341,7 @@ const NavigationScreen: React.FC<Props> = ({
               {nav.ncsStatus}
             </Text>
             <Text style={styles.sensorStatusText} numberOfLines={1}>
-              Vision: {nav.visionStatus === 'UNAVAILABLE' ? 'unavailable' : 'idle'}
+              Vision: {nav.visionStatus.toLowerCase()} - {nav.visionMessage}
             </Text>
             <Text style={styles.drDistanceText}>
               DR distance travelled {formatDistance(nav.drDistanceTravelledM)}

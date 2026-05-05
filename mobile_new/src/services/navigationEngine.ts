@@ -1,13 +1,15 @@
 /**
  * Navigation engine.
- * Tracks rider progress along a loaded route, generates turn-by-turn
- * instructions, detects off-route conditions, and signals arrival.
+ * Tracks route progress, generates turn-by-turn instructions, detects
+ * off-route conditions, and signals arrival.
  */
 import type {ParsedRoute, RouteStep, LatLon} from './routeService';
 
 const OFF_ROUTE_THRESHOLD_M = 50;
 const TURN_ANNOUNCE_DISTANCE_M = 100;
 const TURN_NOW_DISTANCE_M = 40;
+const MANEUVER_PASSED_GRACE_M = 18;
+const ARRIVAL_ANNOUNCE_DISTANCE_M = 80;
 
 export interface NavState {
   nextInstructionText: string;
@@ -18,6 +20,17 @@ export interface NavState {
   confidence: number;
 }
 
+interface StepProgress {
+  startM: number;
+  endM: number;
+}
+
+interface RouteProjection {
+  point: LatLon;
+  progressM: number;
+  distanceFromRouteM: number;
+}
+
 interface UpcomingInstruction {
   text: string;
   distanceM: number;
@@ -26,15 +39,24 @@ interface UpcomingInstruction {
 
 let loadedRoute: ParsedRoute | null = null;
 let currentStepIndex = 0;
+let stepProgress: StepProgress[] = [];
+let totalRouteDistanceM = 0;
 
 export function loadRoute(route: ParsedRoute): void {
   loadedRoute = route;
   currentStepIndex = 0;
+  stepProgress = buildStepProgress(route.steps);
+  totalRouteDistanceM =
+    route.totalDistanceM ||
+    stepProgress[stepProgress.length - 1]?.endM ||
+    routeLength(route.polyline);
 }
 
 export function unloadRoute(): void {
   loadedRoute = null;
   currentStepIndex = 0;
+  stepProgress = [];
+  totalRouteDistanceM = 0;
 }
 
 export function updatePosition(lat: number, lon: number): NavState {
@@ -49,33 +71,40 @@ export function updatePosition(lat: number, lon: number): NavState {
     };
   }
 
-  const steps = loadedRoute.steps;
-  advanceStepIfNeeded(lat, lon, steps);
+  const projection = projectPointOntoRoute({lat, lon}, loadedRoute.polyline);
+  currentStepIndex = stepIndexForProgress(projection.progressM);
 
-  if (currentStepIndex >= steps.length) {
+  const distanceToDestinationM = Math.max(
+    0,
+    totalRouteDistanceM - projection.progressM,
+  );
+  if (distanceToDestinationM <= TURN_NOW_DISTANCE_M) {
     return {
       nextInstructionText: 'You have arrived',
       distanceToNextM: 0,
-      activeStepIndex: steps.length - 1,
+      activeStepIndex: currentStepIndex,
       offRoute: false,
       destinationReached: true,
       confidence: 1,
     };
   }
 
-  const currentStep = steps[currentStepIndex];
-  const distToCorr = distToStepCorridor(lat, lon, currentStep);
-  const offRoute = distToCorr > OFF_ROUTE_THRESHOLD_M;
+  const offRoute = projection.distanceFromRouteM > OFF_ROUTE_THRESHOLD_M;
   const confidence = offRoute
     ? 0.3
-    : 1.0 - Math.min(distToCorr / OFF_ROUTE_THRESHOLD_M, 0.7);
+    : 1.0 - Math.min(projection.distanceFromRouteM / OFF_ROUTE_THRESHOLD_M, 0.7);
 
-  const upcoming = findUpcomingInstruction(lat, lon, steps);
-  const instructionText = buildInstructionText(upcoming);
+  const upcoming = findUpcomingInstruction(
+    projection.progressM,
+    distanceToDestinationM,
+    loadedRoute.steps,
+  );
 
   return {
-    nextInstructionText: instructionText,
-    distanceToNextM: shouldShowDistance(upcoming) ? Math.round(upcoming.distanceM) : 0,
+    nextInstructionText: buildInstructionText(upcoming),
+    distanceToNextM: shouldShowDistance(upcoming)
+      ? Math.round(upcoming.distanceM)
+      : 0,
     activeStepIndex: currentStepIndex,
     offRoute,
     destinationReached: false,
@@ -87,31 +116,59 @@ export function getRoutePolyline(): LatLon[] {
   return loadedRoute?.polyline ?? [];
 }
 
+function buildStepProgress(steps: RouteStep[]): StepProgress[] {
+  let cursorM = 0;
+  return steps.map(step => {
+    const distanceM = Math.max(0, step.distance || routeLength(step.waypoints));
+    const progress = {startM: cursorM, endM: cursorM + distanceM};
+    cursorM += distanceM;
+    return progress;
+  });
+}
+
+function stepIndexForProgress(progressM: number): number {
+  if (stepProgress.length === 0) {
+    return 0;
+  }
+  for (let i = 0; i < stepProgress.length; i++) {
+    if (progressM < stepProgress[i].endM) {
+      return i;
+    }
+  }
+  return stepProgress.length - 1;
+}
+
 function findUpcomingInstruction(
-  lat: number,
-  lon: number,
+  progressM: number,
+  distanceToDestinationM: number,
   steps: RouteStep[],
 ): UpcomingInstruction {
-  const currentStep = steps[currentStepIndex];
-  let distanceToStepStart = distanceToEndOfStep(lat, lon, currentStep);
-
-  for (let i = currentStepIndex + 1; i < steps.length; i++) {
+  for (let i = currentStepIndex; i < steps.length; i++) {
     const instruction = steps[i].instruction;
+    const maneuverProgressM = stepProgress[i]?.startM ?? 0;
+    const distanceToManeuverM = maneuverProgressM - progressM;
+
     if (isArrivalInstruction(instruction)) {
       return {
         text: 'You have arrived',
-        distanceM: distanceToStepStart,
+        distanceM: distanceToDestinationM,
         isArrival: true,
       };
     }
-    if (isTurnInstruction(instruction)) {
-      return {
-        text: normalizeTurnInstruction(instruction),
-        distanceM: distanceToStepStart,
-        isArrival: false,
-      };
+
+    if (!isTurnInstruction(instruction)) {
+      continue;
     }
-    distanceToStepStart += Math.max(0, steps[i].distance);
+
+    if (distanceToManeuverM < -MANEUVER_PASSED_GRACE_M) {
+      continue;
+    }
+
+    return {
+      text: normalizeTurnInstruction(instruction),
+      distanceM: Math.max(0, distanceToManeuverM),
+      isArrival: false,
+    };
   }
 
   return {
@@ -126,7 +183,7 @@ function buildInstructionText(upcoming: UpcomingInstruction): string {
     if (upcoming.distanceM <= TURN_NOW_DISTANCE_M) {
       return 'You have arrived';
     }
-    if (upcoming.distanceM <= TURN_ANNOUNCE_DISTANCE_M) {
+    if (upcoming.distanceM <= ARRIVAL_ANNOUNCE_DISTANCE_M) {
       return `Arrive in ${formatDistance(upcoming.distanceM)}`;
     }
     return 'Continue straight';
@@ -142,8 +199,11 @@ function buildInstructionText(upcoming: UpcomingInstruction): string {
 }
 
 function shouldShowDistance(upcoming: UpcomingInstruction): boolean {
-  return Number.isFinite(upcoming.distanceM) &&
-    upcoming.distanceM <= TURN_ANNOUNCE_DISTANCE_M;
+  return (
+    Number.isFinite(upcoming.distanceM) &&
+    upcoming.distanceM <= TURN_ANNOUNCE_DISTANCE_M &&
+    upcoming.distanceM >= TURN_NOW_DISTANCE_M
+  );
 }
 
 function isTurnInstruction(instruction: string): boolean {
@@ -179,6 +239,9 @@ function normalizeTurnInstruction(instruction: string): string {
   if (lower.startsWith('merge ')) {
     return `Merge ${lower.replace(/^merge\s+/, '')}`;
   }
+  if (lower.startsWith('enter roundabout')) {
+    return sentenceCase(lower);
+  }
   return sentenceCase(lower);
 }
 
@@ -186,93 +249,76 @@ function sentenceCase(text: string): string {
   return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1);
 }
 
-function advanceStepIfNeeded(
-  lat: number,
-  lon: number,
-  steps: RouteStep[],
-): void {
-  if (currentStepIndex >= steps.length) {
-    return;
+function projectPointOntoRoute(point: LatLon, route: LatLon[]): RouteProjection {
+  if (route.length === 0) {
+    return {point, progressM: 0, distanceFromRouteM: Infinity};
   }
-  const endPoint = getStepEndPoint(steps[currentStepIndex]);
-  const dist = haversineMetres(
-    {lat, lon},
-    {lat: endPoint.lat, lon: endPoint.lon},
-  );
+  if (route.length === 1) {
+    return {
+      point: route[0],
+      progressM: 0,
+      distanceFromRouteM: haversineMetres(point, route[0]),
+    };
+  }
 
-  if (dist < 20 && currentStepIndex < steps.length - 1) {
-    currentStepIndex++;
+  let bestPoint = route[0];
+  let bestProgressM = 0;
+  let bestDistanceM = Infinity;
+  let progressBeforeSegmentM = 0;
+
+  for (let i = 0; i < route.length - 1; i++) {
+    const a = route[i];
+    const b = route[i + 1];
+    const projected = projectPointOnSegment(point, a, b);
+    const distanceM = Math.sqrt(projected.distanceSq);
+    if (distanceM < bestDistanceM) {
+      bestDistanceM = distanceM;
+      bestPoint = projected.point;
+      bestProgressM =
+        progressBeforeSegmentM + haversineMetres(a, projected.point);
+    }
+    progressBeforeSegmentM += haversineMetres(a, b);
   }
+
+  return {
+    point: bestPoint,
+    progressM: bestProgressM,
+    distanceFromRouteM: bestDistanceM,
+  };
 }
 
-function getStepEndPoint(step: RouteStep): LatLon {
-  const pts = step.waypoints;
-  if (pts.length === 0) {
-    return {lat: 0, lon: 0};
-  }
-  return pts[pts.length - 1];
+function projectPointOnSegment(
+  point: LatLon,
+  a: LatLon,
+  b: LatLon,
+): {point: LatLon; distanceSq: number} {
+  const originLatRad = (a.lat * Math.PI) / 180;
+  const metresPerDegLat = 111_320;
+  const metresPerDegLon = 111_320 * Math.cos(originLatRad);
+  const bx = (b.lon - a.lon) * metresPerDegLon;
+  const by = (b.lat - a.lat) * metresPerDegLat;
+  const px = (point.lon - a.lon) * metresPerDegLon;
+  const py = (point.lat - a.lat) * metresPerDegLat;
+  const lengthSq = bx * bx + by * by;
+  const t =
+    lengthSq <= 0 ? 0 : Math.max(0, Math.min(1, (px * bx + py * by) / lengthSq));
+  const projX = bx * t;
+  const projY = by * t;
+  return {
+    point: {
+      lat: a.lat + (b.lat - a.lat) * t,
+      lon: a.lon + (b.lon - a.lon) * t,
+    },
+    distanceSq: (px - projX) ** 2 + (py - projY) ** 2,
+  };
 }
 
-function distanceToEndOfStep(
-  lat: number,
-  lon: number,
-  step: RouteStep,
-): number {
-  const pts = step.waypoints;
-  if (pts.length === 0) {
-    return 0;
-  }
-  if (pts.length === 1) {
-    return haversineMetres({lat, lon}, pts[0]);
-  }
-
-  const nearestIndex = nearestWaypointIndex({lat, lon}, pts);
-  let distanceM = haversineMetres({lat, lon}, pts[nearestIndex]);
-  for (let i = nearestIndex; i < pts.length - 1; i++) {
-    distanceM += haversineMetres(pts[i], pts[i + 1]);
+function routeLength(points: LatLon[]): number {
+  let distanceM = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    distanceM += haversineMetres(points[i], points[i + 1]);
   }
   return distanceM;
-}
-
-function nearestWaypointIndex(point: LatLon, pts: LatLon[]): number {
-  let nearestIndex = 0;
-  let nearestDistance = Infinity;
-  for (let i = 0; i < pts.length; i++) {
-    const d = haversineMetres(point, pts[i]);
-    if (d < nearestDistance) {
-      nearestDistance = d;
-      nearestIndex = i;
-    }
-  }
-  return nearestIndex;
-}
-
-function distToStepCorridor(
-  lat: number,
-  lon: number,
-  step: RouteStep,
-): number {
-  const pts = step.waypoints;
-  if (pts.length === 0) {
-    return Infinity;
-  }
-  if (pts.length === 1) {
-    return haversineMetres({lat, lon}, pts[0]);
-  }
-  let minDist = Infinity;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const d = distToSegment({lat, lon}, pts[i], pts[i + 1]);
-    if (d < minDist) {
-      minDist = d;
-    }
-  }
-  return minDist;
-}
-
-function distToSegment(point: LatLon, a: LatLon, b: LatLon): number {
-  const dA = haversineMetres(point, a);
-  const dB = haversineMetres(point, b);
-  return Math.min(dA, dB);
 }
 
 function haversineMetres(a: LatLon, b: LatLon): number {
@@ -288,8 +334,9 @@ function haversineMetres(a: LatLon, b: LatLon): number {
 }
 
 function formatDistance(metres: number): string {
-  const rounded = metres >= TURN_NOW_DISTANCE_M
-    ? Math.max(10, Math.round(metres / 10) * 10)
-    : Math.round(metres);
+  const rounded =
+    metres >= TURN_NOW_DISTANCE_M
+      ? Math.max(10, Math.round(metres / 10) * 10)
+      : Math.round(metres);
   return `${rounded} m`;
 }
