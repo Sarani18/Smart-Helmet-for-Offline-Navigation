@@ -48,6 +48,8 @@ let routeStartTs = 0;
 
 // Route summary (filled on confirmNavStart so we know origin/dest names)
 let routeMeta = { origin: '—', destination: '—', totalDistanceM: 0 };
+let tripStartTs = null;
+let arrivalShown = false;
 
 // Heading-rate buffer for honest IMU graph (last 200 samples)
 const HDG_BUF_LEN = 200;
@@ -256,6 +258,7 @@ function render(ui) {
         lastLandmarkId = ui.last_visual_event.event_id;
         const landmark = ui.last_visual_event.payload.landmark || ui.last_visual_event.payload.landmark_class;
         if (landmark) triggerVisionRescue(landmark);
+        pulseFlowNode('flow-cv');
     }
 
     // Route line
@@ -285,6 +288,15 @@ function render(ui) {
 
     // Route summary strip
     updateRouteStrip(ui);
+
+    // CV overlay + flow widget + arrival check
+    tickCVOverlay();
+    pulseFlowNode('flow-dr');
+    if (instrText) pulseFlowNode('flow-nav');
+    pulseFlowNode('flow-ui');
+    if (ui.destination_reached_flag && !arrivalShown) {
+        showArrival(ui);
+    }
 
     // ── CV LOGGING → console ──────────────────────────────────────────
     if (now - lastCVLogTime > CONFIG.CV_LOG_INTERVAL && ui.route_polyline && ui.route_polyline.length > 1) {
@@ -451,6 +463,8 @@ async function confirmNavStart() {
         if (res.ok) {
             console.log('%c[NAV] Route locked — streaming telemetry', 'color:#3fb950;font-weight:bold');
         }
+        tripStartTs = Date.now();
+        arrivalShown = false;
         document.getElementById('btn-start').style.display = 'none';
         document.getElementById('btn-stop').style.display = 'inline-block';
     } catch(e) {
@@ -691,6 +705,7 @@ function maybeVoiceAnnounce(text, dist) {
 
 function speak(phrase) {
     try {
+        if (voiceMuted) return;
         if (!('speechSynthesis' in window)) return;
         const u = new SpeechSynthesisUtterance(phrase);
         u.rate = 1.05;
@@ -781,6 +796,100 @@ function triggerCrashDemo() {
     speak('Crash detected. Emergency S O S broadcasting.');
     setTimeout(() => { window._localCrashDemo = false; }, 6000);
 }
+
+// ── Voice mute toggle ────────────────────────────────────────────────────
+function toggleVoice() {
+    voiceMuted = !voiceMuted;
+    const btn = document.getElementById('voice-btn');
+    if (btn) {
+        btn.innerText = voiceMuted ? '🔇' : '🔊';
+        btn.classList.toggle('muted', voiceMuted);
+    }
+    if (voiceMuted && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+// ── Preset destination chips ─────────────────────────────────────────────
+function setPreset(from, to) {
+    const o = document.getElementById('nav-origin');
+    const d = document.getElementById('nav-dest');
+    if (o) o.value = from;
+    if (d) d.value = to;
+}
+
+// ── CV detection overlay (mock bounding boxes on Street View) ────────────
+const CV_DETECTIONS = [
+    { x: 60,  y: 70,  w: 70,  h: 90,  label: 'TRAFFIC_LIGHT', conf: 92 },
+    { x: 180, y: 90,  w: 110, h: 80,  label: 'JUNCTION',       conf: 87 },
+    { x: 30,  y: 110, w: 90,  h: 70,  label: 'BUILDING_FACADE',conf: 78 },
+    { x: 200, y: 130, w: 60,  h: 50,  label: 'BIKE',           conf: 84 },
+];
+let _cvIdx = 0;
+let _cvLastSwap = 0;
+function tickCVOverlay() {
+    const svg = document.getElementById('cv-overlay');
+    if (!svg) return;
+    const now = Date.now();
+    if (now - _cvLastSwap < 1800) return;
+    _cvLastSwap = now;
+    _cvIdx = (_cvIdx + 1) % CV_DETECTIONS.length;
+    const d = CV_DETECTIONS[_cvIdx];
+    const flash = (counters.cvRescues > 0 && (now - (window._lastCvFlashTs || 0) < 1500));
+    const stroke = flash ? '#3fb950' : '#58a6ff';
+    svg.innerHTML = `
+        <rect x="${d.x}" y="${d.y}" width="${d.w}" height="${d.h}"
+              fill="none" stroke="${stroke}" stroke-width="2" />
+        <rect x="${d.x}" y="${d.y - 14}" width="${d.label.length * 6 + 30}" height="14"
+              fill="${stroke}" opacity="0.85" />
+        <text x="${d.x + 4}" y="${d.y - 3}" font-size="9" font-family="monospace" fill="#0d1117">
+            ${d.label} ${d.conf}%
+        </text>
+    `;
+}
+
+// ── Flow widget pulse ────────────────────────────────────────────────────
+function pulseFlowNode(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('active');
+    setTimeout(() => el.classList.remove('active'), 600);
+}
+
+// ── Arrival overlay ──────────────────────────────────────────────────────
+function showArrival(ui) {
+    arrivalShown = true;
+    const distKm = ((routeMeta.totalDistanceM || (ui.route_polyline ? ui.route_polyline.length * 12 : 0)) / 1000).toFixed(1);
+    const durSec = tripStartTs ? Math.floor((Date.now() - tripStartTs) / 1000) : 0;
+    const mm = Math.floor(durSec / 60);
+    const ss = String(durSec % 60).padStart(2, '0');
+    const offSec = counters.offlineSec || 0;
+    const offMM = Math.floor(offSec / 60);
+    const offSS = String(offSec % 60).padStart(2, '0');
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+    set('ar-distance', `${distKm} km`);
+    set('ar-duration', `${mm}:${ss}`);
+    set('ar-cv',       counters.cvRescues);
+    set('ar-offline',  `${offMM}:${offSS}`);
+    const ov = document.getElementById('arrival-overlay');
+    if (ov) ov.classList.add('show');
+    speak('Destination reached. Mission complete.');
+}
+function closeArrival() {
+    const ov = document.getElementById('arrival-overlay');
+    if (ov) ov.classList.remove('show');
+}
+
+// Track CV flash timestamp so overlay flashes green on real CV events
+const _origTriggerVisionRescue = typeof triggerVisionRescue === 'function' ? triggerVisionRescue : null;
+if (_origTriggerVisionRescue) {
+    window.triggerVisionRescue = function(landmark) {
+        window._lastCvFlashTs = Date.now();
+        return _origTriggerVisionRescue(landmark);
+    };
+}
+
+window.toggleVoice = toggleVoice;
+window.setPreset = setPreset;
+window.closeArrival = closeArrival;
 
 // Entry Point
 window.init = init;
