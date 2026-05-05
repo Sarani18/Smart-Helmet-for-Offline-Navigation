@@ -10,11 +10,6 @@
 </head>
 <body>
 
-    <!-- Demo-mode running banner -->
-    <div class="demo-running-bar" id="demo-running-bar">
-        <span id="demo-step-text">DEMO SEQUENCE RUNNING</span>
-    </div>
-
     <!-- HEADER -->
     <header class="header">
         <div class="header-left">
@@ -22,23 +17,32 @@
             <h1 class="logo-text">Smart Helmet <span>Navigation</span></h1>
         </div>
         <div class="header-center">
-            <div class="status-pill" id="gps-status">
-                <span class="status-dot pulse"></span>
-                <span id="gps-text">GPS ACTIVE</span>
-            </div>
-            <div class="status-pill mode-pill">
-                <span id="mode-text">ONLINE</span>
-            </div>
-            <div class="status-pill sys-pill sys-offline-visual" id="sys-state" title="nav_mode × position_mode">
+            <div class="status-pill sys-pill sys-offline-visual" id="sys-state" title="System state · nav_mode × position_mode">
                 <span class="status-dot" id="sys-state-dot"></span>
                 <span id="sys-state-text">OFFLINE · VISUAL</span>
             </div>
         </div>
         <div class="header-right">
+            <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Toggle voice prompts">🔊</button>
             <span class="uptime-label">UPTIME</span>
             <span class="uptime-val mono" id="uptime">0:00</span>
         </div>
     </header>
+
+    <!-- ROUTE SUMMARY STRIP -->
+    <div class="route-strip" id="route-strip">
+        <span class="rs-flag">🏁</span>
+        <span class="rs-route">
+            <span id="rs-origin" class="rs-name">—</span>
+            <span class="rs-arrow">→</span>
+            <span id="rs-dest" class="rs-name">—</span>
+        </span>
+        <span class="rs-sep"></span>
+        <span class="rs-stat"><span class="rs-lbl">REMAINING</span><span class="mono" id="rs-remaining">— km</span></span>
+        <span class="rs-stat"><span class="rs-lbl">ETA</span><span class="mono" id="rs-eta">—:—</span></span>
+        <span class="rs-stat"><span class="rs-lbl">STEP</span><span class="mono" id="rs-step">— / —</span></span>
+        <span class="rs-progress-track"><span class="rs-progress-fill" id="rs-progress-fill"></span></span>
+    </div>
 
     <!-- MAIN LAYOUT -->
     <main class="main-layout">
@@ -71,6 +75,20 @@
                     <div class="conn-label">CONNECTIVITY · LAST 60s</div>
                     <div class="conn-track" id="conn-track"></div>
                 </div>
+
+                <!-- System architecture flow widget -->
+                <div class="flow-widget" title="Sensor fusion pipeline">
+                    <div class="flow-title">FUSION PIPELINE</div>
+                    <div class="flow-row">
+                        <div class="flow-node" id="flow-cv"><span class="fn-dot"></span><span>CV</span></div>
+                        <span class="flow-arrow">→</span>
+                        <div class="flow-node" id="flow-dr"><span class="fn-dot"></span><span>DR</span></div>
+                        <span class="flow-arrow">→</span>
+                        <div class="flow-node" id="flow-nav"><span class="fn-dot"></span><span>NAV</span></div>
+                        <span class="flow-arrow">→</span>
+                        <div class="flow-node" id="flow-ui"><span class="fn-dot"></span><span>UI</span></div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -79,11 +97,13 @@
 
             <!-- Street View Card -->
             <div class="card sv-card">
-                <div class="card-label">AI RIDER VISION</div>
+                <div class="card-label">AI RIDER VISION · CV PIPELINE</div>
                 <div class="sv-wrapper">
                     <div id="street-view"></div>
                     <div class="sv-overlay">
                         <span class="sv-tag">LIVE</span>
+                        <svg class="cv-overlay" id="cv-overlay" viewBox="0 0 320 200" preserveAspectRatio="none"></svg>
+                        <div class="cv-fps mono" id="cv-fps">CV · 24 fps</div>
                     </div>
                 </div>
             </div>
@@ -176,12 +196,36 @@
             <input type="text" id="nav-origin" class="modal-input mono" placeholder="e.g. Shaniwar Wada" value="Shaniwar Wada" />
             <label class="input-label" style="margin-top:12px">TO</label>
             <input type="text" id="nav-dest" class="modal-input mono" placeholder="e.g. Pune Station" value="Pune Station" />
+            <div class="preset-row">
+                <span class="input-label" style="margin:8px 0 4px">QUICK PRESETS</span>
+                <div class="preset-chips">
+                    <button class="preset-chip" type="button" onclick="setPreset('Shaniwar Wada','Pune Station')">Shaniwar Wada → Pune Station</button>
+                    <button class="preset-chip" type="button" onclick="setPreset('JM Road','MIT Pune')">JM Road → MIT Pune</button>
+                    <button class="preset-chip" type="button" onclick="setPreset('Koregaon Park','Pune Airport')">Koregaon Park → Airport</button>
+                </div>
+            </div>
         </div>
         <div class="modal-actions">
             <button class="btn btn-primary" onclick="confirmNavStart()">Start Route</button>
             <button class="btn btn-ghost" onclick="closeNavModal()">Cancel</button>
         </div>
     </div>
+
+    <!-- ARRIVAL OVERLAY -->
+    <section id="arrival-overlay" class="arrival-overlay">
+        <div class="arrival-content">
+            <div class="arrival-icon">🏁</div>
+            <h1 class="arrival-title">DESTINATION REACHED</h1>
+            <p class="arrival-sub">MISSION COMPLETE</p>
+            <div class="arrival-stats">
+                <div class="ar-stat"><span class="ar-val mono" id="ar-distance">— km</span><span class="ar-lbl">DISTANCE</span></div>
+                <div class="ar-stat"><span class="ar-val mono" id="ar-duration">—:—</span><span class="ar-lbl">DURATION</span></div>
+                <div class="ar-stat"><span class="ar-val mono" id="ar-cv">0</span><span class="ar-lbl">CV RESCUES</span></div>
+                <div class="ar-stat"><span class="ar-val mono" id="ar-offline">0:00</span><span class="ar-lbl">OFFLINE TIME</span></div>
+            </div>
+            <button class="btn btn-primary" onclick="closeArrival()" style="margin-top:20px">Close</button>
+        </div>
+    </section>
 
     <!-- EMERGENCY SOS OVERLAY -->
     <section id="sos-overlay" class="sos-overlay">
@@ -191,7 +235,7 @@
             <p class="sos-sub">EMERGENCY SOS SEQUENCE INITIALIZED</p>
             <div class="sos-detail">
                 <p>CONTACTING EMERGENCY SERVICES...</p>
-                <p class="sos-sms">SMS SENT TO: <span class="mono">+91 9172605822</span></p>
+                <p class="sos-sms">SMS SENT TO: <span class="mono">+91 9767605577</span></p>
             </div>
         </div>
     </section>

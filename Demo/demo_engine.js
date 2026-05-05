@@ -42,9 +42,16 @@ let lastConnTick = 0;
 
 // Voice (turn-by-turn)
 let lastVoicedManeuverKey = '';
+let voiceMuted = false;
+let arrivalShown = false;
+let routeStartTs = 0;
 
-// Demo mode
-let demoModeRunning = false;
+// Route summary (filled on confirmNavStart so we know origin/dest names)
+let routeMeta = { origin: '—', destination: '—', totalDistanceM: 0 };
+
+// Heading-rate buffer for honest IMU graph (last 200 samples)
+const HDG_BUF_LEN = 200;
+const headingRateBuffer = new Array(HDG_BUF_LEN).fill(0);
 
 // Smooth animation state
 let animFrom = null;
@@ -271,6 +278,14 @@ function render(ui) {
     tickOfflineCounter(sysState);
     renderCounters();
 
+    // Heading-rate buffer for honest IMU graph
+    const dHdg = ((heading - prevHeading + 540) % 360) - 180;
+    headingRateBuffer.shift();
+    headingRateBuffer.push(dHdg);
+
+    // Route summary strip
+    updateRouteStrip(ui);
+
     // ── CV LOGGING → console ──────────────────────────────────────────
     if (now - lastCVLogTime > CONFIG.CV_LOG_INTERVAL && ui.route_polyline && ui.route_polyline.length > 1) {
         lastCVLogTime = now;
@@ -416,6 +431,10 @@ async function confirmNavStart() {
     if (!origin || !dest) return;
 
     closeNavModal();
+    routeMeta.origin = origin;
+    routeMeta.destination = dest;
+    document.getElementById('rs-origin').innerText = origin;
+    document.getElementById('rs-dest').innerText = dest;
     console.log(`%c[NAV] Route: ${origin} → ${dest}`, 'color:#58a6ff;font-weight:bold');
 
     try {
@@ -493,16 +512,10 @@ function applySystemState(state) {
 
 async function toggleGPSFailure() {
     isGPSFailed = !isGPSFailed;
-    const pill = document.getElementById('gps-status');
-    const text = document.getElementById('gps-text');
     if (isGPSFailed) {
-        pill.className = "status-pill gps-lost";
-        text.innerText = "GPS LOST";
         console.log('%c[CRITICAL] GNSS Signal Lost — switching to Dead Reckoning', 'color:#f85149;font-weight:bold');
         console.log('%c[DR] IMU integration active | Kalman Filter: error bias accumulation', 'color:#d29922');
     } else {
-        pill.className = "status-pill";
-        text.innerText = "GPS ACTIVE";
         console.log('%c[SYS] GPS Signal Restored — state realigned', 'color:#3fb950;font-weight:bold');
     }
     // Tell the server — flips nav_mode + position_mode, drives the 4-state pill.
@@ -530,10 +543,6 @@ function triggerVisionRescue(landmarkName) {
     if (alertEl) alertEl.style.display = "block";
 
     isGPSFailed = false;
-    const pill = document.getElementById('gps-status');
-    const text = document.getElementById('gps-text');
-    pill.className = "status-pill";
-    text.innerText = "GPS ACTIVE";
 
     showMissionBanner('👁', 'VISUAL FIX APPLIED · POSITION CORRECTED', 'lvl-good', 3500);
     speak('Visual landmark matched');
@@ -556,21 +565,58 @@ function initIMUGraph() {
     const canvas = document.getElementById('imu-chart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let offset = 0;
     function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const W = canvas.width, H = canvas.height;
+        ctx.clearRect(0, 0, W, H);
+        // Zero baseline
+        ctx.strokeStyle = 'rgba(139,148,158,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, H/2); ctx.lineTo(W, H/2);
+        ctx.stroke();
+        // Real heading-rate trace
         ctx.strokeStyle = '#58a6ff';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        for (let x = 0; x < canvas.width; x++) {
-            const y = 30 + Math.sin((x + offset) * 0.12) * 12 + Math.random() * 2;
-            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        const len = headingRateBuffer.length;
+        for (let i = 0; i < len; i++) {
+            const x = (i / (len - 1)) * W;
+            // ±30° → full canvas height, clamp
+            const v = Math.max(-30, Math.min(30, headingRateBuffer[i]));
+            const y = H/2 - (v / 30) * (H/2 - 4);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
-        offset += 2;
         requestAnimationFrame(draw);
     }
     draw();
+}
+
+// Route summary strip — pulls from ui_state every render
+function updateRouteStrip(ui) {
+    if (!ui) return;
+    const stepIdx = ui.active_step_index || 0;
+    const totalSteps = (ui.route_polyline && ui.route_polyline.length) || 0;
+
+    // Approx remaining: distance to next + (steps_left * 200m heuristic)
+    const remainingM = (ui.distance_to_next_m || 0) +
+                       Math.max(0, totalSteps - stepIdx - 1) * 200;
+    const remainingKm = (remainingM / 1000).toFixed(2);
+
+    // ETA = now + remainingM / current speed (fallback 30 km/h if 0)
+    const speedKmh = smoothedSpeedKmh > 5 ? smoothedSpeedKmh : 30;
+    const etaSec   = (remainingM / 1000) / speedKmh * 3600;
+    const etaDate  = new Date(Date.now() + etaSec * 1000);
+    const etaStr   = `${String(etaDate.getHours()).padStart(2,'0')}:${String(etaDate.getMinutes()).padStart(2,'0')}`;
+
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+    set('rs-remaining', remainingM > 0 ? `${remainingKm} km` : '— km');
+    set('rs-eta',       remainingM > 0 ? etaStr : '—:—');
+    set('rs-step',      totalSteps > 0 ? `${stepIdx + 1} / ${totalSteps}` : '— / —');
+
+    const pct = totalSteps > 0 ? Math.min(100, (stepIdx / Math.max(1, totalSteps - 1)) * 100) : 0;
+    const bar = document.getElementById('rs-progress-fill');
+    if (bar) bar.style.width = pct + '%';
 }
 
 const NIGHT_STYLE = [
@@ -728,55 +774,6 @@ function renderCounters() {
     set('kpi-offline', fmt(counters.offlineSec));
     set('kpi-tiles',   counters.waypoints);
 }
-
-// ── DEMO MODE: scripted finals narrative ─────────────────────────────────
-async function runDemoMode() {
-    if (demoModeRunning) {
-        console.log('%c[DEMO] Already running — ignoring', 'color:#d29922');
-        return;
-    }
-    demoModeRunning = true;
-    const btn = document.getElementById('btn-demo');
-    const bar = document.getElementById('demo-running-bar');
-    const stepText = document.getElementById('demo-step-text');
-    btn.classList.add('running');
-    bar.classList.add('show');
-
-    const setStep = (msg) => { if (stepText) stepText.innerText = msg; console.log(`%c[DEMO] ${msg}`, 'color:#a78bfa;font-weight:bold'); };
-
-    try {
-        setStep('STAGE 1 · NEGOTIATING ROUTE');
-        document.getElementById('nav-origin').value = 'Shaniwar Wada';
-        document.getElementById('nav-dest').value   = 'Pune Station';
-        await confirmNavStart();
-        showMissionBanner('▶', 'DEMO STARTED · ROUTE LOCKED', 'lvl-info', 2500);
-        speak('Demo navigation initiated. Route locked.');
-
-        await wait(8000);
-        setStep('STAGE 2 · SIMULATING GPS DENIAL');
-        if (!isGPSFailed) await toggleGPSFailure();
-        speak('G P S signal lost. Switching to dead reckoning.');
-
-        await wait(10000);
-        setStep('STAGE 3 · VISION RESCUE');
-        triggerVisionRescue('TRAFFIC_LIGHT_INTERSECTION');
-
-        await wait(4000);
-        setStep('STAGE 4 · GPS RESTORED');
-        if (isGPSFailed) await toggleGPSFailure();
-        speak('Connectivity restored. System realigned.');
-
-        await wait(2500);
-        setStep('DEMO SEQUENCE COMPLETE');
-        showMissionBanner('✓', 'DEMO SEQUENCE COMPLETE', 'lvl-good', 3000);
-    } finally {
-        await wait(1500);
-        btn.classList.remove('running');
-        bar.classList.remove('show');
-        demoModeRunning = false;
-    }
-}
-function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // Crash demo button — flashes the SOS overlay locally, no backend trigger
 function triggerCrashDemo() {
