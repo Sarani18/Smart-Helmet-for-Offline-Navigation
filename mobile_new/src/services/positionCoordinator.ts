@@ -2,15 +2,17 @@
  * Position coordinator.
  *
  * This is the app-side NCS handoff layer:
- *   1. GPS available -> use GPS and keep DR anchored.
+ *   1. GPS available -> use GPS and keep route progress anchored.
  *   2. GPS lost -> activate DR and request Vision.
- *   3. Vision is unavailable for now, so DR provides fallback map updates.
- *   4. If neither source can update position, emit UNKNOWN without crashing.
+ *   3. Vision is unavailable for now.
+ *   4. DR contributes distance only; NCS projects that distance onto the route.
  */
 import * as gpsService from './gpsService';
 import * as sensorService from './sensorService';
 import * as deadReckoningService from './deadReckoningService';
 import * as headingService from './headingService';
+import * as navigationEngine from './navigationEngine';
+import type {LatLon} from './routeService';
 
 export type PositionMode = 'GPS' | 'DR' | 'UNKNOWN';
 export type VisionStatus = 'IDLE' | 'UNAVAILABLE';
@@ -24,6 +26,7 @@ export interface CoordinatorPosition {
   visionStatus: VisionStatus;
   ncsStatus: string;
   drDistanceTravelledM: number;
+  routeProgressM: number;
   ts_ms: number;
 }
 
@@ -35,12 +38,18 @@ let removeIMUListener: (() => void) | null = null;
 let lastTs = 0;
 let fallbackActive = false;
 let lastKnownSpeedMps = 0;
+let lastRouteProgressM = 0;
+let fallbackStartRouteProgressM = 0;
+let lastFallbackEmitProgressM = -Infinity;
+let lastFallbackEmitTsMs = 0;
 
 const FALLBACK_SPEED_MPS = 1.5;
 const MIN_MOVING_GPS_SPEED_MPS = 0.5;
 const GRAVITY_MPS2 = 9.80665;
 const ACCEL_MOTION_THRESHOLD_MPS2 = 0.45;
 const GYRO_MOTION_THRESHOLD_RADPS = 0.08;
+const DR_ROUTE_CHECKPOINT_M = 25;
+const DR_ROUTE_CHECKPOINT_MS = 2500;
 
 export function startCoordinator(): void {
   if (intervalId !== null) {
@@ -49,6 +58,10 @@ export function startCoordinator(): void {
 
   fallbackActive = false;
   lastKnownSpeedMps = 0;
+  lastRouteProgressM = 0;
+  fallbackStartRouteProgressM = 0;
+  lastFallbackEmitProgressM = -Infinity;
+  lastFallbackEmitTsMs = 0;
   try {
     deadReckoningService.reset();
     headingService.resetHeading();
@@ -94,11 +107,12 @@ function enterFallback(): void {
     return;
   }
   fallbackActive = true;
-  const lastGPS = gpsService.getLatestGPS();
+  fallbackStartRouteProgressM = lastRouteProgressM;
+  lastFallbackEmitProgressM = -Infinity;
+  lastFallbackEmitTsMs = 0;
+  const routePoint = getPointAtRouteProgress(fallbackStartRouteProgressM);
   try {
-    if (lastGPS) {
-      deadReckoningService.anchor(lastGPS.lat, lastGPS.lon);
-    }
+    deadReckoningService.anchor(routePoint.lat, routePoint.lon);
     deadReckoningService.resetDistanceTravelled();
     headingService.resetHeading();
   } catch (e) {
@@ -148,6 +162,16 @@ function resolveFallbackSpeed(imu: sensorService.IMUReading | null): number {
   return hasMotionEvidence(imu) ? FALLBACK_SPEED_MPS : 0;
 }
 
+function shouldEmitFallbackCheckpoint(progressM: number, now: number): boolean {
+  if (lastFallbackEmitProgressM === -Infinity) {
+    return true;
+  }
+  const movedEnough =
+    Math.abs(progressM - lastFallbackEmitProgressM) >= DR_ROUTE_CHECKPOINT_M;
+  const waitedEnough = now - lastFallbackEmitTsMs >= DR_ROUTE_CHECKPOINT_MS;
+  return movedEnough && waitedEnough;
+}
+
 function resolvePosition(): void {
   const now = Date.now();
   const gps = gpsService.getLatestGPS();
@@ -155,6 +179,8 @@ function resolvePosition(): void {
 
   if (gpsOk && gps !== null) {
     leaveFallback();
+    const projected = projectPointOntoRoute({lat: gps.lat, lon: gps.lon});
+    lastRouteProgressM = projected.progressM;
     try {
       deadReckoningService.anchor(gps.lat, gps.lon);
     } catch (e) {
@@ -172,6 +198,7 @@ function resolvePosition(): void {
       visionStatus: 'IDLE',
       ncsStatus: 'GPS active',
       drDistanceTravelledM: 0,
+      routeProgressM: lastRouteProgressM,
       ts_ms: now,
     });
     return;
@@ -194,27 +221,36 @@ function resolvePosition(): void {
       }
     }
 
-    const drPos = deadReckoningService.getPosition();
-    if (drPos) {
-      emit({
-        lat: drPos.lat,
-        lon: drPos.lon,
-        positionMode: 'DR',
-        confidence: Math.max(0, 1 - drPos.uncertaintyMeters / 100),
-        drActive: true,
-        visionStatus: 'UNAVAILABLE',
-        ncsStatus: 'GPS lost - NCS activated DR; Vision unavailable',
-        drDistanceTravelledM: deadReckoningService.getDistanceTravelledMeters(),
-        ts_ms: now,
-      });
+    const drDistanceM = deadReckoningService.getDistanceTravelledMeters();
+    const routeProgressM = fallbackStartRouteProgressM + drDistanceM;
+    const routePoint = getPointAtRouteProgress(routeProgressM);
+    lastRouteProgressM = routeProgressM;
+
+    if (!shouldEmitFallbackCheckpoint(routeProgressM, now)) {
       return;
     }
+
+    lastFallbackEmitProgressM = routeProgressM;
+    lastFallbackEmitTsMs = now;
+    emit({
+      lat: routePoint.lat,
+      lon: routePoint.lon,
+      positionMode: 'DR',
+      confidence: 0.72,
+      drActive: true,
+      visionStatus: 'UNAVAILABLE',
+      ncsStatus: 'GPS lost - NCS using DR distance on route; Vision unavailable',
+      drDistanceTravelledM: drDistanceM,
+      routeProgressM,
+      ts_ms: now,
+    });
+    return;
   }
 
-  const drPos = deadReckoningService.getPosition();
+  const routePoint = getPointAtRouteProgress(lastRouteProgressM);
   emit({
-    lat: drPos?.lat ?? 0,
-    lon: drPos?.lon ?? 0,
+    lat: routePoint.lat,
+    lon: routePoint.lon,
     positionMode: 'UNKNOWN',
     confidence: 0,
     drActive: fallbackActive,
@@ -223,8 +259,108 @@ function resolvePosition(): void {
       ? `DR unavailable: ${sensorService.getSensorError()}`
       : 'GPS lost - waiting for DR sensor data; Vision unavailable',
     drDistanceTravelledM: deadReckoningService.getDistanceTravelledMeters(),
+    routeProgressM: lastRouteProgressM,
     ts_ms: now,
   });
+}
+
+function getPointAtRouteProgress(progressM: number): LatLon {
+  const route = navigationEngine.getRoutePolyline();
+  if (route.length === 0) {
+    const gps = gpsService.getLatestGPS();
+    return gps ? {lat: gps.lat, lon: gps.lon} : {lat: 0, lon: 0};
+  }
+  if (route.length === 1 || progressM <= 0) {
+    return route[0];
+  }
+
+  let remaining = progressM;
+  for (let i = 0; i < route.length - 1; i++) {
+    const a = route[i];
+    const b = route[i + 1];
+    const segmentM = haversineMetres(a, b);
+    if (remaining <= segmentM) {
+      const t = segmentM <= 0 ? 0 : remaining / segmentM;
+      return {
+        lat: a.lat + (b.lat - a.lat) * t,
+        lon: a.lon + (b.lon - a.lon) * t,
+      };
+    }
+    remaining -= segmentM;
+  }
+  return route[route.length - 1];
+}
+
+function projectPointOntoRoute(point: LatLon): {point: LatLon; progressM: number} {
+  const route = navigationEngine.getRoutePolyline();
+  if (route.length === 0) {
+    return {point, progressM: 0};
+  }
+  if (route.length === 1) {
+    return {point: route[0], progressM: 0};
+  }
+
+  let bestPoint = route[0];
+  let bestProgress = 0;
+  let bestDistanceSq = Infinity;
+  let progressBeforeSegment = 0;
+
+  for (let i = 0; i < route.length - 1; i++) {
+    const a = route[i];
+    const b = route[i + 1];
+    const projected = projectPointOnSegment(point, a, b);
+    if (projected.distanceSq < bestDistanceSq) {
+      bestDistanceSq = projected.distanceSq;
+      bestPoint = projected.point;
+      bestProgress =
+        progressBeforeSegment + haversineMetres(a, projected.point);
+    }
+    progressBeforeSegment += haversineMetres(a, b);
+  }
+
+  return {point: bestPoint, progressM: bestProgress};
+}
+
+function projectPointOnSegment(
+  point: LatLon,
+  a: LatLon,
+  b: LatLon,
+): {point: LatLon; distanceSq: number} {
+  const originLatRad = (a.lat * Math.PI) / 180;
+  const metresPerDegLat = 111_320;
+  const metresPerDegLon = 111_320 * Math.cos(originLatRad);
+  const ax = 0;
+  const ay = 0;
+  const bx = (b.lon - a.lon) * metresPerDegLon;
+  const by = (b.lat - a.lat) * metresPerDegLat;
+  const px = (point.lon - a.lon) * metresPerDegLon;
+  const py = (point.lat - a.lat) * metresPerDegLat;
+  const vx = bx - ax;
+  const vy = by - ay;
+  const lengthSq = vx * vx + vy * vy;
+  const t =
+    lengthSq <= 0 ? 0 : Math.max(0, Math.min(1, (px * vx + py * vy) / lengthSq));
+  const projX = ax + vx * t;
+  const projY = ay + vy * t;
+  return {
+    point: {
+      lat: a.lat + (b.lat - a.lat) * t,
+      lon: a.lon + (b.lon - a.lon) * t,
+    },
+    distanceSq: (px - projX) ** 2 + (py - projY) ** 2,
+  };
+}
+
+function haversineMetres(a: LatLon, b: LatLon): number {
+  const R = 6_371_000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
 function emit(pos: CoordinatorPosition): void {
