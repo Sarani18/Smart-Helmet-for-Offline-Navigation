@@ -167,6 +167,7 @@ def _get_status():
         "has_state":    s is not None,
         "nav_mode":     s.nav_mode.value if s else None,
         "instruction":  s.next_instruction_text if s else None,
+        "bluetooth":    _bridge.bluetooth_status(),
         "polyline_pts": len(s.route_polyline) if s else 0,
     }
 

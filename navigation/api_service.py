@@ -11,6 +11,7 @@ This layer is transport-agnostic and can be connected to FastAPI, Flask, or any 
 from __future__ import annotations
 
 import time
+import os
 from typing import Any, Dict, List, Optional
 
 from .contracts import (
@@ -90,7 +91,10 @@ class NavigationAPIService:
         self._last_mode_transition_ts_ms: Optional[int] = None
 
         # ESP32 Hardware Integration
-        self.hardware = HardwareService(esp32_ip="10.100.30.1")
+        self.hardware = HardwareService(
+            esp32_ip="10.100.30.1",
+            transport=os.getenv("SMART_HELMET_LED_TRANSPORT", "disabled"),
+        )
 
     def set_emergency_state(self, active: bool):
         self._is_emergency = active
@@ -150,14 +154,7 @@ class NavigationAPIService:
         nav_hint = self._build_nav_hint(event.session_id, now_ts_ms)
         ui_state = self._build_ui_state(event.session_id, now_ts_ms)
 
-        # Trigger Hardware LEDs with Safety Guard
-        try:
-            await self.hardware.update_from_instruction(
-                ui_state.get("next_instruction_text", ""),
-                is_gps_failed=(nav_mode == NavMode.OFFLINE or nav_mode == NavMode.DEGRADED)
-            )
-        except Exception as e:
-            print(f"[Hardware Warning] Failed to reach ESP32: {e}")
+        await self._publish_hardware_from_ui_state(ui_state, source="visual_event")
 
         return {
             "accepted": ingest.accepted,
@@ -222,14 +219,7 @@ class NavigationAPIService:
             t_ms = payload.get("ts_ms", self._now_ms())
             ui_state = self._build_ui_state(s_id, t_ms)
             
-            # Trigger Hardware LEDs with Safety Guard
-            try:
-                await self.hardware.update_from_instruction(
-                    ui_state.get("next_instruction_text", ""),
-                    is_gps_failed=True 
-                )
-            except Exception as e:
-                print(f"[Hardware Warning] Failed to reach ESP32 during DR: {e}")
+            await self._publish_hardware_from_ui_state(ui_state, source="dead_reckoning")
 
             return {
                 "accepted": True,
@@ -275,6 +265,7 @@ class NavigationAPIService:
             self._active_session_id = action.session_id
             nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
             ui_state = self._build_ui_state(action.session_id, action.ts_ms)
+            await self._publish_hardware_from_ui_state(ui_state, source="ui_stop")
             return {
                 "accepted": True,
                 "action_type": action.action_type.value,
@@ -334,6 +325,7 @@ class NavigationAPIService:
             nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
             nav_hint = self._build_nav_hint(action.session_id, action.ts_ms)
             ui_state = self._build_ui_state(action.session_id, action.ts_ms)
+            await self._publish_hardware_from_ui_state(ui_state, source="ui_route_loaded")
 
             return {
                 "accepted": True,
@@ -356,6 +348,7 @@ class NavigationAPIService:
 
         nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(action.ts_ms)
         ui_state = self._build_ui_state(action.session_id, action.ts_ms)
+        await self._publish_hardware_from_ui_state(ui_state, source="ui_unsupported")
         return {
             "accepted": False,
             "action_type": action.action_type.value,
@@ -429,6 +422,7 @@ class NavigationAPIService:
         nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(status.ts_ms)
         session_id = self._active_session_id or status.session_id
         ui_state = self._build_ui_state(session_id, status.ts_ms)
+        await self._publish_hardware_from_ui_state(ui_state, source="connectivity")
 
         return {
             "accepted": True,
@@ -485,6 +479,19 @@ class NavigationAPIService:
     @property
     def network_status(self) -> NetworkStatus:
         return self._network_status
+
+    async def _publish_hardware_from_ui_state(self, ui_state: Dict[str, Any], source: str) -> None:
+        if getattr(self.hardware, "transport", None) in {"disabled", "off", "none"}:
+            return
+        try:
+            await self.hardware.update_from_ui_state(ui_state)
+            print(
+                "[ui-sync] state->bluetooth "
+                f"source={source} instruction={ui_state.get('next_instruction_text')!r} "
+                f"step={ui_state.get('active_step_index')}"
+            )
+        except Exception as e:
+            print(f"[Hardware Warning] Failed to update ESP32 LEDs from {source}: {e}")
 
     def _compute_nav_mode(self, now_ts_ms: int) -> tuple[NavMode, str]:
         degraded_reason = self._get_degraded_reason(now_ts_ms)
