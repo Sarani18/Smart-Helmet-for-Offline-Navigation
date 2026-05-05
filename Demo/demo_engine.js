@@ -257,7 +257,6 @@ function render(ui) {
         lastLandmarkId = ui.last_visual_event.event_id;
         const landmark = ui.last_visual_event.payload.landmark || ui.last_visual_event.payload.landmark_class;
         if (landmark) triggerVisionRescue(landmark);
-        pulseFlowNode('flow-cv');
     }
 
     // Route line
@@ -288,11 +287,8 @@ function render(ui) {
     // Route summary strip
     updateRouteStrip(ui);
 
-    // CV overlay + flow widget + arrival check
+    // CV overlay + arrival check
     tickCVOverlay();
-    pulseFlowNode('flow-dr');
-    if (instrText) pulseFlowNode('flow-nav');
-    pulseFlowNode('flow-ui');
     if (ui.destination_reached_flag && !arrivalShown) {
         showArrival(ui);
     }
@@ -843,14 +839,6 @@ function tickCVOverlay() {
             ${d.label} ${d.conf}%
         </text>
     `;
-}
-
-// ── Flow widget pulse ────────────────────────────────────────────────────
-function pulseFlowNode(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.add('active');
-    setTimeout(() => el.classList.remove('active'), 600);
 }
 
 // ── Arrival overlay ──────────────────────────────────────────────────────
