@@ -3,146 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>National Finals | Smart Helmet v2.0</title>
-    <!-- Premium Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>Smart Helmet Navigation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="demo_styles.css">
-    <!-- Google Maps API -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDG5leEsNLQ_1ZjQSBqEtWo2DQsLxZHtlY&libraries=geometry&callback=init" async defer></script>
 </head>
-<body class="elite-theme">
+<body>
 
-    <!-- TOP CONTROL BAR -->
-    <header class="main-header glass">
+    <!-- Demo-mode running banner -->
+    <div class="demo-running-bar" id="demo-running-bar">
+        <span id="demo-step-text">DEMO SEQUENCE RUNNING</span>
+    </div>
+
+    <!-- HEADER -->
+    <header class="header">
         <div class="header-left">
-            <div class="logo-circle neon-pulse"></div>
-            <div class="title-block">
-                <h1>SMART HELMET <span class="version">NAVIGATION</span></h1>
-                <p class="subtitle">SYSTEM STATUS: <span id="mode-text">ONLINE</span></p>
+            <div class="logo-dot"></div>
+            <h1 class="logo-text">Smart Helmet <span>Navigation</span></h1>
+        </div>
+        <div class="header-center">
+            <div class="status-pill" id="gps-status">
+                <span class="status-dot pulse"></span>
+                <span id="gps-text">GPS ACTIVE</span>
+            </div>
+            <div class="status-pill mode-pill">
+                <span id="mode-text">ONLINE</span>
+            </div>
+            <div class="status-pill sys-pill sys-offline-visual" id="sys-state" title="nav_mode × position_mode">
+                <span class="status-dot" id="sys-state-dot"></span>
+                <span id="sys-state-text">OFFLINE · VISUAL</span>
             </div>
         </div>
         <div class="header-right">
-            <div id="gps-status" class="status-chip gps-active">
-                <span class="dot pulse"></span> <span id="gps-text">GPS: CONNECTED</span>
-            </div>
+            <span class="uptime-label">UPTIME</span>
+            <span class="uptime-val mono" id="uptime">0:00</span>
         </div>
     </header>
 
-    <!-- CONTENT GRID -->
-    <main class="tactical-grid">
-        
-        <!-- COLUMN 1: VITALS -->
-        <aside class="col-vitals">
-            <div class="tactical-card glass">
-                <div class="card-header">SPATIAL TELEMETRY</div>
-                <div class="card-body">
-                    <canvas id="imu-chart" width="280" height="100"></canvas>
-                    <div class="data-group">
-                        <div class="data-point">
-                            <label>LATENCY</label>
-                            <span id="latency-val" class="mono">-- ms</span>
-                        </div>
-                        <div class="data-point">
-                            <label>HEADING</label>
-                            <span id="heading-val" class="mono">0.0°</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <!-- MAIN LAYOUT -->
+    <main class="main-layout">
 
-            <div class="tactical-card glass">
-                <div class="card-header">LOCALIZATION DRIFT</div>
-                <div class="card-body">
-                    <div class="drift-row">
-                        <span class="drift-label">SPATIAL UNCERTAINTY</span>
-                        <span id="drift-val" class="drift-numeric mono">0.0m</span>
-                    </div>
-                    <div class="drift-track-container">
-                        <div id="drift-bar" class="drift-track-fill" style="width: 0%"></div>
-                    </div>
-                    <p class="dr-status">MODE: <span id="pos-mode">GPS_CONVERGED</span></p>
-                </div>
-            </div>
-
-            <div class="tactical-card glass speed-card">
-                <div class="speed-container">
-                    <span id="speed-val" class="mono">--</span>
-                    <label>KM/H</label>
-                </div>
-            </div>
-        </aside>
-
-        <!-- COLUMN 2: PRIMARY NAVIGATION -->
-        <section class="col-map">
-            <div class="map-perspective-wrapper">
+        <!-- LEFT: MAP -->
+        <section class="map-section">
+            <div class="map-container">
                 <div id="map"></div>
-                
-                <!-- HUD OVERLAYS -->
-                <div class="hud-instruction glass">
-                    <div class="hud-dir-icon" id="dir-icon">⬆️</div>
-                    <div class="hud-details">
-                        <div id="inst-distance" class="mono">-- m</div>
-                        <div id="inst-text">AWAITING MISSION START</div>
+
+                <!-- Floating turn-by-turn instruction bar -->
+                <div class="instr-bar" id="instr-bar">
+                    <div class="instr-icon" id="instr-icon">⬆</div>
+                    <div class="instr-body">
+                        <div class="instr-dist mono" id="instr-dist">— m</div>
+                        <div class="instr-text" id="instr-text">AWAITING ROUTE</div>
                     </div>
                 </div>
 
-                <div id="vision-alert" class="mission-alert glass">
-                    <div class="alert-content">AI CV STATE CORRECTION APPLIED</div>
+                <!-- Transient mission banner — fades in on state transitions -->
+                <div class="mission-banner" id="mission-banner">
+                    <span class="mb-icon" id="mb-icon">🛰</span>
+                    <span class="mb-text" id="mb-text">SYSTEM ARMED</span>
+                </div>
+
+                <!-- Vision-rescue toast -->
+                <div class="vision-toast" id="vision-alert">VISUAL LANDMARK MATCHED · POSITION CORRECTED</div>
+
+                <!-- 60-second connectivity timeline -->
+                <div class="conn-timeline">
+                    <div class="conn-label">CONNECTIVITY · LAST 60s</div>
+                    <div class="conn-track" id="conn-track"></div>
                 </div>
             </div>
         </section>
 
-        <!-- COLUMN 3: INTELLIGENCE -->
-        <aside class="col-intel">
-            <div class="tactical-card glass intel-feed">
-                <div class="card-header">AI RIDER VISION FEED</div>
-                <div class="camera-container">
+        <!-- RIGHT: SIDEBAR -->
+        <aside class="sidebar">
+
+            <!-- Street View Card -->
+            <div class="card sv-card">
+                <div class="card-label">AI RIDER VISION</div>
+                <div class="sv-wrapper">
                     <div id="street-view"></div>
-                    <div class="camera-overlay">
-                        <div class="scanline"></div>
-                        <div class="ai-overlay-tag">LIVE_VISION</div>
+                    <div class="sv-overlay">
+                        <span class="sv-tag">LIVE</span>
                     </div>
                 </div>
             </div>
 
-            <div class="tactical-card glass log-panel">
-                <div class="card-header">FUSION KERNEL LOG</div>
-                <div id="fusion-log" class="mono-log">
-                    <div class="log-line">> BOOTING SECURE NAVIGATION...</div>
+            <!-- Telemetry Row -->
+            <div class="telem-row">
+                <div class="telem-item">
+                    <span class="telem-val mono" id="speed-val">--</span>
+                    <span class="telem-unit">KM/H</span>
+                </div>
+                <div class="telem-item">
+                    <span class="telem-val mono" id="heading-val">0.0°</span>
+                    <span class="telem-unit">HEADING</span>
+                </div>
+                <div class="telem-item">
+                    <span class="telem-val mono" id="drift-val">0.0m</span>
+                    <span class="telem-unit">DRIFT</span>
                 </div>
             </div>
-        </aside>
 
+            <!-- Drift Bar -->
+            <div class="card drift-card">
+                <div class="drift-header">
+                    <span>SPATIAL UNCERTAINTY</span>
+                    <span class="mono" id="pos-mode">GPS</span>
+                </div>
+                <div class="drift-track">
+                    <div class="drift-fill" id="drift-bar" style="width:0%"></div>
+                </div>
+            </div>
+
+            <!-- IMU Waveform -->
+            <div class="card imu-card">
+                <div class="card-label">IMU SENSOR</div>
+                <canvas id="imu-chart" width="320" height="60"></canvas>
+            </div>
+
+            <!-- Latency -->
+            <div class="card latency-card">
+                <span class="card-label">LATENCY</span>
+                <span class="mono" id="latency-val">-- ms</span>
+            </div>
+
+            <!-- Mission Counters -->
+            <div class="card kpi-card">
+                <div class="card-label">MISSION COUNTERS</div>
+                <div class="kpi-grid">
+                    <div class="kpi-item">
+                        <span class="kpi-val mono" id="kpi-dr">0</span>
+                        <span class="kpi-lbl">DR FIXES</span>
+                    </div>
+                    <div class="kpi-item">
+                        <span class="kpi-val mono" id="kpi-cv">0</span>
+                        <span class="kpi-lbl">CV RESCUES</span>
+                    </div>
+                    <div class="kpi-item">
+                        <span class="kpi-val mono" id="kpi-offline">0:00</span>
+                        <span class="kpi-lbl">OFFLINE</span>
+                    </div>
+                    <div class="kpi-item">
+                        <span class="kpi-val mono" id="kpi-tiles">0</span>
+                        <span class="kpi-lbl">WAYPOINTS</span>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
     </main>
 
-    <!-- ACTION BAR -->
-    <footer class="action-bar glass">
-        <div class="control-cluster">
-            <button class="action-btn primary" onclick="startTrip()">START NAVIGATION</button>
-            <button class="action-btn danger pulse-danger" id="btn-kill-gps" onclick="toggleGPSFailure()">KILL GPS SIGNAL</button>
+    <!-- FOOTER ACTION BAR -->
+    <footer class="footer-bar">
+        <div class="footer-left">
+            <button class="btn btn-primary" id="btn-start" onclick="openNavModal()">▶ START</button>
+            <button class="btn btn-danger" id="btn-stop" onclick="stopTrip()" style="display:none">■ STOP</button>
+            <button class="btn btn-outline" id="btn-kill-gps" onclick="toggleGPSFailure()">KILL GPS</button>
+            <button class="btn btn-outline" id="btn-crash" onclick="triggerCrashDemo()">🚨 CRASH</button>
         </div>
-        <div class="telemetry-bar mono">
-            <span>UPTIME: <span id="uptime">0:00</span></span>
-            <span>CPU: 14%</span>
-            <span>MEM: 512MB [LOCAL_CACHE]</span>
+        <div class="footer-right mono">
+            <span class="footer-stat"><span class="footer-stat-lbl">SESSION</span> <span id="session-id-short">FINALS</span></span>
+            <span class="footer-stat"><span class="footer-stat-lbl">TICK</span> <span id="tick-rate">300ms</span></span>
         </div>
     </footer>
 
+    <!-- NAV INPUT MODAL -->
+    <div id="nav-modal-backdrop" class="modal-backdrop" onclick="closeNavModal()"></div>
+    <div id="nav-modal" class="modal">
+        <h2 class="modal-title">Start Navigation</h2>
+        <div class="modal-body">
+            <label class="input-label">FROM</label>
+            <input type="text" id="nav-origin" class="modal-input mono" placeholder="e.g. Shaniwar Wada" value="Shaniwar Wada" />
+            <label class="input-label" style="margin-top:12px">TO</label>
+            <input type="text" id="nav-dest" class="modal-input mono" placeholder="e.g. Pune Station" value="Pune Station" />
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="confirmNavStart()">Start Route</button>
+            <button class="btn btn-ghost" onclick="closeNavModal()">Cancel</button>
+        </div>
+    </div>
+
     <!-- EMERGENCY SOS OVERLAY -->
-    <section id="sos-overlay" class="sos-container glass">
+    <section id="sos-overlay" class="sos-overlay">
         <div class="sos-content">
-            <div class="sos-icon-pulse">🚨</div>
+            <div class="sos-icon">🚨</div>
             <h1 class="sos-title">CRASH DETECTED</h1>
-            <p class="sos-subtitle">EMERGENCY SOS SEQUENCE INITIALIZED</p>
-            <div class="sos_message_box">
+            <p class="sos-sub">EMERGENCY SOS SEQUENCE INITIALIZED</p>
+            <div class="sos-detail">
                 <p>CONTACTING EMERGENCY SERVICES...</p>
-                <p class="sms-status">SMS SENT TO: <span class="mono">+91 9172605822</span></p>
+                <p class="sos-sms">SMS SENT TO: <span class="mono">+91 9172605822</span></p>
             </div>
-            <div class="sos-countdown">AUTOMATIC RESCUE DISPATCH IN PROGRESS</div>
         </div>
     </section>
 
-    <!-- App Logic -->
     <script src="demo_engine.js"></script>
 </body>
 </html>

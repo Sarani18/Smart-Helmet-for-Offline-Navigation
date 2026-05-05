@@ -79,11 +79,18 @@ class RouteProgressEngine:
                 "already_completed",
             )
 
-        step = self._route.steps[self._active_step_index]
+        # Scan forward for the next real maneuver
+        real_idx = self._active_step_index
+        while real_idx < len(self._route.steps) - 1:
+            if self._route.steps[real_idx].instruction.lower() != "follow route":
+                break
+            real_idx += 1
+
+        step = self._route.steps[real_idx]
         step_text = step.instruction.lower()
 
         if self._event_matches_step(event, step_text):
-            self._active_step_index += 1
+            self._active_step_index = real_idx + 1
             return ProgressUpdate(
                 True,
                 self._active_step_index,

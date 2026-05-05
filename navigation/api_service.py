@@ -77,6 +77,8 @@ class NavigationAPIService:
         self._active_session_id: Optional[str] = None
         self._route_polyline: List[tuple] = []
         self._last_visual_event: Optional[Dict[str, Any]] = None
+        self._last_dr_event_ts_ms: Optional[int] = None
+        self._last_visual_event_ts_ms: Optional[int] = None
         
         self._current_pos: Optional[tuple] = None
         self._current_heading: float = 0.0
@@ -115,11 +117,33 @@ class NavigationAPIService:
         if ingest.accepted:
             self._last_accepted_event_ts_ms = event.ts_ms
             self._last_visual_event = payload  # Track the full payload for UI feedback
+            self._last_visual_event_ts_ms = now_ts_ms
             self._uncertainty_m = 0.0 # RESET DRIFT ON VISION CONFIRM
             for ready in self._pipeline.pop_ready(now_ts_ms):
-                update = self._progress.process_event(ready)
-                self._confidence.update_from_event(ready, update)
-                updates.append(update)
+                allow_event = True
+                if self._current_pos and self._progress.has_route():
+                    real_idx = self._progress.get_active_step_index()
+                    route = self._route_processor.get_current_route()
+                    if route:
+                        while real_idx < len(route.steps) - 1:
+                            if route.steps[real_idx].instruction.lower() != "follow route":
+                                break
+                            real_idx += 1
+                        
+                        step_wp = route.steps[real_idx].waypoint
+                        from .route_processor import RouteProcessor
+                        dist = RouteProcessor._haversine(
+                            self._current_pos[0], self._current_pos[1],
+                            step_wp.latitude, step_wp.longitude
+                        )
+                        # Reject premature visual turn confirmations if physical maneuver is far away (>150m)
+                        if dist > 150.0:
+                            allow_event = False
+                            
+                if allow_event:
+                    update = self._progress.process_event(ready)
+                    self._confidence.update_from_event(ready, update)
+                    updates.append(update)
 
         nav_mode, mode_reason, mode_changed = self._refresh_nav_mode(now_ts_ms)
         degraded_reason = mode_reason if nav_mode == NavMode.DEGRADED else None
@@ -171,25 +195,32 @@ class NavigationAPIService:
                 self._uncertainty_m = min(self._uncertainty_m + 0.5, 50.0) # Constant drift per "ping" for sim, capped at 50m
             self._current_pos = (float(lat), float(lon))
             self._current_heading = float(heading)
+            self._last_dr_event_ts_ms = int(payload.get("ts_ms", self._now_ms()))
+
+            # Advance step dynamically based on physical DR proximity
+            if self._progress.has_route() and not self._progress.is_destination_reached():
+                active_step_idx = self._progress.get_active_step_index()
+                route = self._route_processor.get_current_route()
+                
+                # We check distance to the NEXT step's waypoint! 
+                next_step_idx = active_step_idx + 1
+                if route and next_step_idx < len(route.steps):
+                    step_wp = route.steps[next_step_idx].waypoint
+                    from .route_processor import RouteProcessor
+                    dist = RouteProcessor._haversine(
+                        self._current_pos[0], self._current_pos[1],
+                        step_wp.latitude, step_wp.longitude
+                    )
+                    # If we are within 15m of the NEXT waypoint, advance to it!
+                    if dist < 15.0:
+                        self._progress._active_step_index = next_step_idx
+                        # Confidence stays high since we are following GPS route
+                        self._confidence._score = min(self._confidence._score + 0.1, 1.0)
             
-            # Update progress engine with DR event
-            # This ensures instructions (turns/instructions) update as you move
-            from .contracts import EventMessage, LocalizationEventType, TurnPayload, TurnClass
-            mock_event = EventMessage(
-                session_id=payload.get("session_id", self._active_session_id or "default"),
-                event_id="dr_" + str(payload.get("ts_ms", self._now_ms())),
-                ts_ms=payload.get("ts_ms", self._now_ms()),
-                event_type=LocalizationEventType.TURN,
-                confidence=0.9,
-                payload=TurnPayload(turn_class=TurnClass.STRAIGHT), # Default to straight for DR updates
-                heading_deg=self._current_heading,
-                speed_mps=float(payload.get("speed_mps", 0.0))
-            )
-            
-            update = self._progress.process_event(mock_event)
-            self._confidence.update_from_event(mock_event, update)
-            
-            ui_state = self._build_ui_state(mock_event.session_id, mock_event.ts_ms)
+            # Since mock_event is gone, we must build ui_state with payload's session
+            s_id = payload.get("session_id", self._active_session_id or "default")
+            t_ms = payload.get("ts_ms", self._now_ms())
+            ui_state = self._build_ui_state(s_id, t_ms)
             
             # Trigger Hardware LEDs with Safety Guard
             try:
@@ -517,11 +548,50 @@ class NavigationAPIService:
 
             # Use original Route Processor logic for the Blue Line
             if self._progress.has_route():
-                instr = self._progress.get_next_instruction_text() or "Follow the Blue Line"
-                d_next = self._progress.get_distance_to_next_turn_m() or 0.0
+                if self._current_pos and not self._progress.is_destination_reached():
+                    # Scan forward for the next REAL step (skip 'Follow route' geometry points)
+                    real_idx = self._progress.get_active_step_index()
+                    route = self._route_processor.get_current_route()
+                    if route:
+                        while real_idx < len(route.steps) - 1:
+                            if route.steps[real_idx].instruction.lower() != "follow route":
+                                break
+                            real_idx += 1
+                        
+                        instr = route.steps[real_idx].instruction
+                        step_wp = route.steps[real_idx].waypoint
+                        from .route_processor import RouteProcessor
+                        d_next = RouteProcessor._haversine(
+                            self._current_pos[0], self._current_pos[1],
+                            step_wp.latitude, step_wp.longitude
+                        )
+                    else:
+                        instr = self._progress.get_next_instruction_text() or "Follow the Blue Line"
+                        d_next = self._progress.get_distance_to_next_turn_m() or 0.0
+                else:
+                    instr = self._progress.get_next_instruction_text() or "Follow the Blue Line"
+                    d_next = self._progress.get_distance_to_next_turn_m() or 0.0
             else:
                 instr = "Starting Trip from Main Road..."
                 d_next = 0.0
+
+            # Suppress turn instructions until inside the announce window —
+            # OSRM step text says "Turn left on X" even when 1km+ away.
+            if self._progress.has_route() and instr:
+                ANNOUNCE_WINDOW_M = 60.0
+                from .route_progress import RouteProgressEngine, TurnClass as _TC
+                expected_turn = RouteProgressEngine.infer_expected_turn_from_instruction(instr)
+                if expected_turn != _TC.STRAIGHT and d_next > ANNOUNCE_WINDOW_M:
+                    current_road = ""
+                    try:
+                        prev_idx = self._progress.get_active_step_index() - 1
+                        if prev_idx >= 0 and self._progress._route is not None:
+                            prev_text = self._progress._route.steps[prev_idx].instruction
+                            if " on " in prev_text:
+                                current_road = prev_text.split(" on ", 1)[1].strip()
+                    except Exception:
+                        current_road = ""
+                    instr = f"Continue straight on {current_road}" if current_road else "Continue straight"
 
             state = UIStateMessage(
                 session_id=session_id,
@@ -558,6 +628,19 @@ class NavigationAPIService:
                 res["current_position"] = list(self._current_pos)
                 res["heading"] = self._current_heading
                 res["uncertainty_m"] = self._uncertainty_m
+
+            # 4-state pill (matches embedded UI: nav_mode × position_mode)
+            is_offline = nav_mode in (NavMode.OFFLINE, NavMode.DEGRADED)
+            is_visual  = position_mode == PositionMode.VISUAL
+            if not is_offline and not is_visual:
+                system_state = "ONLINE_GPS"
+            elif is_offline and not is_visual:
+                system_state = "OFFLINE_GPS"
+            elif not is_offline and is_visual:
+                system_state = "ONLINE_VISUAL"
+            else:
+                system_state = "OFFLINE_VISUAL"
+            res["system_state"] = system_state
             return res
         except Exception as e:
             import traceback
