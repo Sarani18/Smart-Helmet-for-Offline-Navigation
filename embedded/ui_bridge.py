@@ -34,6 +34,7 @@ from .nav_interface import (
 )
 from .app_interface.ui_manager import UIManager
 from .led_controller import LEDController
+from .bluetooth_instruction_bridge import BluetoothInstructionBridge
 
 _LED_KEYWORDS: dict[str, str] = {
     "left":        "left",
@@ -53,9 +54,11 @@ class UIBridge:
         self,
         ui_manager:     Optional[UIManager]     = None,
         led_controller: Optional[LEDController] = None,
+        bluetooth_bridge: Optional[BluetoothInstructionBridge] = None,
     ) -> None:
         self._ui  = ui_manager     or UIManager()
         self._led = led_controller or LEDController()
+        self._bt  = bluetooth_bridge or BluetoothInstructionBridge()
 
         self._latest_state:    Optional[UIStateMessage]                   = None
         self._on_state_update: Optional[Callable[[dict], None]]           = None
@@ -104,6 +107,9 @@ class UIBridge:
         else:
             led_kw = next((v for k, v in _LED_KEYWORDS.items() if k in lower), "straight")
             self._led.instruction_to_led(led_kw)
+
+        # Send the same instruction currently rendered on the map to the ESP.
+        self._bt.publish_ui_state(state)
 
         # Broadcast to all WebSocket clients
         if self._on_state_update:
@@ -161,3 +167,12 @@ class UIBridge:
         if s and s.current_lat() is not None:
             return {"lat": s.current_lat(), "lng": s.current_lng()}
         return None
+
+    def bluetooth_status(self) -> dict:
+        status = self._bt.status()
+        return {
+            "enabled": status.enabled,
+            "connected": status.connected,
+            "last_command": status.last_command,
+            "last_error": status.last_error,
+        }
