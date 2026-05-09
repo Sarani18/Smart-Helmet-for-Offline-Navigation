@@ -20,6 +20,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as gpsService from '../services/gpsService';
 import * as sensorService from '../services/sensorService';
 import * as bleService from '../services/bleService';
+import * as helmetWifiService from '../services/helmetWifiService';
 import * as navigationEngine from '../services/navigationEngine';
 import {
   startCoordinator,
@@ -185,6 +186,12 @@ const NavigationScreen: React.FC<Props> = ({
         bleService.sendNavInstruction(state.nextInstructionText, state.distanceToNextM);
         bleService.sendGPSStatus(pos.positionMode === 'GPS');
       }
+      helmetWifiService.sendNavigationCue({
+        instructionText: state.nextInstructionText,
+        distanceToNextM: state.distanceToNextM,
+        offRoute: state.offRoute,
+        destinationReached: state.destinationReached,
+      });
 
       if (!firstFixDone.current && pos.positionMode === 'GPS') {
         firstFixDone.current = true;
@@ -230,6 +237,8 @@ const NavigationScreen: React.FC<Props> = ({
       stopCoordinator();
       gpsService.stopGPS();
       bleService.stopBLE();
+      helmetWifiService.clearHelmet();
+      helmetWifiService.resetHelmetCommandCache();
       navigationEngine.unloadRoute();
     };
     // handlePosition is stable (useCallback with [onStop])

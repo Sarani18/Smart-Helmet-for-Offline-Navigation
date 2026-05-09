@@ -33,6 +33,7 @@ import {
 } from '../services/routeService';
 import {downloadTilesForRoute} from '../services/tileService';
 import {startGPS} from '../services/gpsService';
+import {checkHelmetConnection} from '../services/helmetWifiService';
 import type {ParsedRoute, LatLon} from '../services/routeService';
 
 interface Props {
@@ -49,6 +50,8 @@ function makeSessionId(): string {
   return `ride_${Date.now()}`;
 }
 
+type HelmetConnectionState = 'idle' | 'checking' | 'connected' | 'disconnected';
+
 const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
   const insets = useSafeAreaInsets();
   const [origin, setOrigin] = useState('Pune Airport');
@@ -57,6 +60,22 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
   const [statusText, setStatusText] = useState('');
   const [originCoords, setOriginCoords] = useState<LatLon | null>(null);
   const [fetchingLoc, setFetchingLoc] = useState(false);
+  const [helmetState, setHelmetState] = useState<HelmetConnectionState>('idle');
+  const [helmetStatusText, setHelmetStatusText] = useState('Helmet not connected');
+
+  const handleHelmetConnect = async () => {
+    setHelmetState('checking');
+    setHelmetStatusText('Connecting to helmet...');
+
+    const result = await checkHelmetConnection();
+    if (result.connected) {
+      setHelmetState('connected');
+      setHelmetStatusText('Helmet connected');
+    } else {
+      setHelmetState('disconnected');
+      setHelmetStatusText('Helmet not connected');
+    }
+  };
 
   const handleUseMyLocation = async () => {
     setFetchingLoc(true);
@@ -258,6 +277,39 @@ const HomeScreen: React.FC<Props> = ({onNavigationStarted, onDemo}) => {
           </Text>
         </Pressable>
 
+        <View style={styles.helmetCard}>
+          <View style={styles.helmetStatusRow}>
+            <View
+              style={[
+                styles.helmetDot,
+                helmetState === 'connected' && styles.helmetDotConnected,
+                helmetState === 'checking' && styles.helmetDotChecking,
+                helmetState === 'disconnected' && styles.helmetDotDisconnected,
+              ]}
+            />
+            <View style={styles.helmetTextBlock}>
+              <Text style={styles.helmetTitle}>Helmet Connection</Text>
+              <Text style={styles.helmetStatusText}>{helmetStatusText}</Text>
+            </View>
+          </View>
+          <Pressable
+            style={({pressed}) => [
+              styles.helmetButton,
+              pressed && styles.helmetButtonPressed,
+              helmetState === 'checking' && styles.helmetButtonDisabled,
+            ]}
+            onPress={handleHelmetConnect}
+            disabled={helmetState === 'checking'}>
+            {helmetState === 'checking' ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.helmetButtonText}>
+                {helmetState === 'connected' ? 'Reconnect' : 'Connect'}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+
         <Text style={styles.hint}>
           First use requires internet for route + tiles.{'\n'}
           Same route loads instantly on retry.
@@ -340,6 +392,42 @@ const styles = StyleSheet.create({
   },
   demoButtonPressed: {backgroundColor: '#e8f0fe', transform: [{scale: 0.98}]},
   demoButtonText: {color: '#1a73e8', fontSize: 15, fontWeight: '700'},
+  helmetCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e6ea',
+  },
+  helmetStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  helmetDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#9aa0a6',
+    marginRight: 10,
+  },
+  helmetDotConnected: {backgroundColor: '#34a853'},
+  helmetDotChecking: {backgroundColor: '#fbbc04'},
+  helmetDotDisconnected: {backgroundColor: '#ea4335'},
+  helmetTextBlock: {flex: 1},
+  helmetTitle: {fontSize: 14, fontWeight: '800', color: '#1a1a1a'},
+  helmetStatusText: {fontSize: 12, color: '#5f6368', marginTop: 2},
+  helmetButton: {
+    backgroundColor: '#202124',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  helmetButtonPressed: {backgroundColor: '#3c4043', transform: [{scale: 0.98}]},
+  helmetButtonDisabled: {backgroundColor: '#9aa0a6'},
+  helmetButtonText: {color: '#fff', fontSize: 14, fontWeight: '700'},
   hint: {textAlign: 'center', fontSize: 11, color: '#aaa', lineHeight: 17},
   inputRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   inputFlex: {flex: 1},
