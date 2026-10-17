@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Segmentation benchmark</title>
+<style>
+  body { font: 16px -apple-system, system-ui, sans-serif; margin: 20px; color: #111; background: #fff; }
+  button { font-size: 18px; padding: 12px 20px; }
+  pre { background: #f3f3f3; padding: 12px; white-space: pre-wrap; font-size: 13px; }
+</style>
+<script>
+  // Capture the WebAssembly linear memory so its size can be reported after inference.
+  window.__wasmMemories = [];
+  const OrigMemory = WebAssembly.Memory;
+  WebAssembly.Memory = function (desc) { const m = new OrigMemory(desc); window.__wasmMemories.push(m); return m; };
+  WebAssembly.Memory.prototype = OrigMemory.prototype;
+  const grab = (res) => {
+    const inst = res.instance || res;
+    if (inst && inst.exports) for (const v of Object.values(inst.exports)) if (v instanceof OrigMemory) window.__wasmMemories.push(v);
+    return res;
+  };
+  const oi = WebAssembly.instantiate, ois = WebAssembly.instantiateStreaming;
+  WebAssembly.instantiate = (...a) => oi.apply(WebAssembly, a).then(grab);
+  if (ois) WebAssembly.instantiateStreaming = (...a) => ois.apply(WebAssembly, a).then(grab);
+</script>
+<script src="ort.wasm.min.js"></script>
+</head>
+<body>
+<h2>Smart-helmet segmentation benchmark</h2>
+<p>Keep this tab in the foreground and the phone unlocked until it says Done (about a minute).</p>
+<label>Phone model: <input id="device" placeholder="e.g. iPhone 13" style="font-size:16px"></label>
+<p><button id="go">Run benchmark</button></p>
+<pre id="log"></pre>
+<script>
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.ceil(p * s.length) - 1)]; };
+const wasmMB = () => Math.max(0, ...window.__wasmMemories.map(m => m.buffer.byteLength)) / 1048576;
+
+document.getElementById('go').onclick = async () => {
+  const btn = document.getElementById('go'); btn.disabled = true;
+  try {
+    const j0 = performance.now();
+    let acc = 0;
+    for (let i = 0; i < 50000000; i++) acc = (acc + i * 7) | 0;
+    const jsLoopMs = performance.now() - j0;
+    window.__jsLoopMs = jsLoopMs;
+    log(`JS speed check: ${jsLoopMs.toFixed(0)} ms (${acc & 1})`);
+    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.wasmPaths = './';
+    const t0 = performance.now();
+    const session = await ort.InferenceSession.create('seg.onnx', { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+    const loadMs = performance.now() - t0;
+    const memAfterLoad = wasmMB();
+    log(`model loaded in ${loadMs.toFixed(0)} ms, wasm memory ${memAfterLoad.toFixed(1)} MB`);
+
+    const data = new Float32Array(3 * 320 * 320);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const input = new ort.Tensor('float32', data, [1, 3, 320, 320]);
+
+    for (let i = 0; i < 5; i++) await session.run({ input });
+    log('warm-up done (5 runs)');
+
+    const times = [];
+    for (let i = 0; i < 30; i++) {
+      const s = performance.now();
+      await session.run({ input });
+      times.push(performance.now() - s);
+      if ((i + 1) % 10 === 0) log(`  ${i + 1}/30`);
+    }
+    const mean = times.reduce((a, b) => a + b, 0) / times.length;
+    const result = {
+      device: document.getElementById('device').value || 'unspecified',
+      userAgent: navigator.userAgent,
+      hardwareConcurrency: navigator.hardwareConcurrency || null,
+      js_loop_ms: +window.__jsLoopMs.toFixed(1),
+      runtime: `onnxruntime-web ${ort.env.versions ? ort.env.versions.web : ''} wasm, 1 thread`,
+      input: '1x3x320x320',
+      n: times.length,
+      load_ms: +loadMs.toFixed(1),
+      mean_ms: +mean.toFixed(1),
+      p95_ms: +pct(times, 0.95).toFixed(1),
+      max_ms: +Math.max(...times).toFixed(1),
+      min_ms: +Math.min(...times).toFixed(1),
+      wasm_memory_after_load_mb: +memAfterLoad.toFixed(1),
+      wasm_memory_peak_mb: +wasmMB().toFixed(1),
+      js_heap_mb: performance.memory ? +(performance.memory.usedJSHeapSize / 1048576).toFixed(1) : null,
+      times_ms: times.map(t => +t.toFixed(1)),
+    };
+    log(`\nmean ${result.mean_ms} ms | p95 ${result.p95_ms} ms | max ${result.max_ms} ms`);
+    log(`peak wasm memory ${result.wasm_memory_peak_mb} MB`);
+    const r = await fetch('result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result) });
+    log(r.ok ? '\nDone. Results sent to the Mac.' : '\nDone, but sending failed. Screenshot this screen.');
+  } catch (e) {
+    log('ERROR: ' + e);
+    fetch('result', { method: 'POST', body: JSON.stringify({ error: String(e), userAgent: navigator.userAgent }) });
+  }
+  btn.disabled = false;
+};
+</script>
+</body>
+</html>

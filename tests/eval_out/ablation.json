@@ -1,0 +1,270 @@
+{
+  "A: DR only": {
+    "n_runs": 100,
+    "n_clean_runs": 0,
+    "peak_uncertainty_m": {
+      "mean": 14.39430704525814,
+      "std": 0.08778565741792793,
+      "min": 14.155140763501908,
+      "max": 14.58033633485932,
+      "n": 100
+    },
+    "true_position_error_m": {
+      "mean": 22.241461931550486,
+      "std": 3.262769288420053,
+      "min": 14.8554035064099,
+      "max": 29.263825767142848,
+      "n": 100
+    },
+    "max_drift_between_corr_m": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 100
+    },
+    "max_drift_between_corr_m_clean": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    },
+    "true_position_error_m_clean": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    },
+    "turn_detection_rate": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 100
+    },
+    "false_corrections_per_min": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 100
+    },
+    "recovery_time_s": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    },
+    "cv_conf_at_accepted_turn": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    }
+  },
+  "B: DR + map matching": {
+    "n_runs": 100,
+    "n_clean_runs": 0,
+    "peak_uncertainty_m": {
+      "mean": 14.39430704525814,
+      "std": 0.08778565741792793,
+      "min": 14.155140763501908,
+      "max": 14.58033633485932,
+      "n": 100
+    },
+    "true_position_error_m": {
+      "mean": 19.148254574215898,
+      "std": 1.931246911337692,
+      "min": 15.515543107610053,
+      "max": 23.701728127592858,
+      "n": 100
+    },
+    "max_drift_between_corr_m": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 100
+    },
+    "max_drift_between_corr_m_clean": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    },
+    "true_position_error_m_clean": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    },
+    "turn_detection_rate": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 100
+    },
+    "false_corrections_per_min": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 100
+    },
+    "recovery_time_s": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    },
+    "cv_conf_at_accepted_turn": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 0
+    }
+  },
+  "C: DR + visual correction": {
+    "n_runs": 100,
+    "n_clean_runs": 89,
+    "peak_uncertainty_m": {
+      "mean": 6.345898653034314,
+      "std": 1.4745807198251288,
+      "min": 5.689014857191943,
+      "max": 11.452994162674072,
+      "n": 100
+    },
+    "true_position_error_m": {
+      "mean": 28.98646371913869,
+      "std": 2.9094624575084578,
+      "min": 24.940593831729295,
+      "max": 45.38348881737462,
+      "n": 100
+    },
+    "max_drift_between_corr_m": {
+      "mean": 26.32387228889145,
+      "std": 4.291436773513961,
+      "min": 8.274749856500522,
+      "max": 33.001500110589134,
+      "n": 100
+    },
+    "max_drift_between_corr_m_clean": {
+      "mean": 27.500003547280944,
+      "std": 2.1770834532782577,
+      "min": 21.812494375847592,
+      "max": 33.001500110589134,
+      "n": 89
+    },
+    "true_position_error_m_clean": {
+      "mean": 28.51560116925665,
+      "std": 1.5913671697812957,
+      "min": 24.940593831729295,
+      "max": 33.001500110589134,
+      "n": 89
+    },
+    "turn_detection_rate": {
+      "mean": 0.945,
+      "std": 0.15644487847162017,
+      "min": 0.5,
+      "max": 1.0,
+      "n": 100
+    },
+    "false_corrections_per_min": {
+      "mean": 0.475,
+      "std": 0.8437268515343103,
+      "min": 0.0,
+      "max": 3.75,
+      "n": 100
+    },
+    "recovery_time_s": {
+      "mean": 18.4,
+      "std": 5.10294032886923,
+      "min": 17.0,
+      "max": 37.0,
+      "n": 100
+    },
+    "cv_conf_at_accepted_turn": {
+      "mean": 0.9247745540843643,
+      "std": 0.00989187589478672,
+      "min": 0.9024476967436619,
+      "max": 0.9504533662968855,
+      "n": 189
+    }
+  },
+  "D: DR + map matching + visual": {
+    "n_runs": 100,
+    "n_clean_runs": 89,
+    "peak_uncertainty_m": {
+      "mean": 6.345898653034314,
+      "std": 1.4745807198251288,
+      "min": 5.689014857191943,
+      "max": 11.452994162674072,
+      "n": 100
+    },
+    "true_position_error_m": {
+      "mean": 19.346976041085608,
+      "std": 2.0594569858956917,
+      "min": 14.557873280190424,
+      "max": 24.249007352400543,
+      "n": 100
+    },
+    "max_drift_between_corr_m": {
+      "mean": 12.581322733138517,
+      "std": 2.0399751460805504,
+      "min": 8.252275416072708,
+      "max": 18.024260521156577,
+      "n": 100
+    },
+    "max_drift_between_corr_m_clean": {
+      "mean": 12.65473870098598,
+      "std": 2.0449676189995363,
+      "min": 8.435470462715877,
+      "max": 18.024260521156577,
+      "n": 89
+    },
+    "true_position_error_m_clean": {
+      "mean": 19.234252200821206,
+      "std": 2.0535571018919914,
+      "min": 14.557873280190424,
+      "max": 24.249007352400543,
+      "n": 89
+    },
+    "turn_detection_rate": {
+      "mean": 0.945,
+      "std": 0.15644487847162017,
+      "min": 0.5,
+      "max": 1.0,
+      "n": 100
+    },
+    "false_corrections_per_min": {
+      "mean": 0.475,
+      "std": 0.8437268515343103,
+      "min": 0.0,
+      "max": 3.75,
+      "n": 100
+    },
+    "recovery_time_s": {
+      "mean": 18.4,
+      "std": 5.10294032886923,
+      "min": 17.0,
+      "max": 37.0,
+      "n": 100
+    },
+    "cv_conf_at_accepted_turn": {
+      "mean": 0.9247745540843643,
+      "std": 0.00989187589478672,
+      "min": 0.9024476967436619,
+      "max": 0.9504533662968855,
+      "n": 189
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "ride": {
+    "gps_fixes": 537,
+    "duration_s": 540.4,
+    "waypoints": 50,
+    "junctions": 16
+  },
+  "params": {
+    "ride": "/tmp/ride",
+    "blackout": 15.0,
+    "stride": 10.0,
+    "miss_rate": 0.05,
+    "accept_m": 25.0,
+    "match_max_m": 40.0,
+    "seed": 1000,
+    "out": "tests/eval_out/real_ride_15s.json"
+  },
+  "aggregate": {
+    "A: DR only": {
+      "windows": 0,
+      "peak_error_m": {
+        "n": 0
+      },
+      "mean_error_m": {
+        "n": 0
+      },
+      "max_drift_between_corr_m": {
+        "n": 0
+      },
+      "corrections_per_window": {
+        "n": 0
+      }
+    },
+    "B: DR + map matching": {
+      "windows": 0,
+      "peak_error_m": {
+        "n": 0
+      },
+      "mean_error_m": {
+        "n": 0
+      },
+      "max_drift_between_corr_m": {
+        "n": 0
+      },
+      "corrections_per_window": {
+        "n": 0
+      }
+    },
+    "C: DR + junction corr.": {
+      "windows": 0,
+      "peak_error_m": {
+        "n": 0
+      },
+      "mean_error_m": {
+        "n": 0
+      },
+      "max_drift_between_corr_m": {
+        "n": 0
+      },
+      "corrections_per_window": {
+        "n": 0
+      }
+    },
+    "D: full": {
+      "windows": 0,
+      "peak_error_m": {
+        "n": 0
+      },
+      "mean_error_m": {
+        "n": 0
+      },
+      "max_drift_between_corr_m": {
+        "n": 0
+      },
+      "corrections_per_window": {
+        "n": 0
+      }
+    }
+  }
+}

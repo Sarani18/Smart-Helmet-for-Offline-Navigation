@@ -1,0 +1,1533 @@
+{
+  "rides": [
+    {
+      "ride": "Csv .zip",
+      "duration_min": 9.0,
+      "distance_km": 2.76,
+      "mean_speed_kmh": 18.4,
+      "median_gnss_acc_m": 14.2,
+      "waypoints": 50,
+      "junctions": 16,
+      "windows": 47,
+      "peak_mean_m": {
+        "A": 135.9,
+        "B": 116.0,
+        "C": 138.2,
+        "D": 109.1
+      },
+      "contrasts": {
+        "B-A": {
+          "pct": -14.7,
+          "mean_diff_m": -20.0,
+          "ci95": [
+            -39.0,
+            -0.9
+          ],
+          "win_rate": 0.55,
+          "p": 0.0808
+        },
+        "C-A": {
+          "pct": 1.7,
+          "mean_diff_m": 2.3,
+          "ci95": [
+            -2.8,
+            7.3
+          ],
+          "win_rate": 0.32,
+          "p": 0.2646
+        },
+        "D-A": {
+          "pct": -19.7,
+          "mean_diff_m": -26.8,
+          "ci95": [
+            -43.3,
+            -10.4
+          ],
+          "win_rate": 0.7,
+          "p": 0.0023
+        },
+        "D-B": {
+          "pct": -5.9,
+          "mean_diff_m": -6.9,
+          "ci95": [
+            -15.3,
+            1.6
+          ],
+          "win_rate": 0.32,
+          "p": 0.4001
+        },
+        "D-C": {
+          "pct": -21.1,
+          "mean_diff_m": -29.1,
+          "ci95": [
+            -46.9,
+            -11.3
+          ],
+          "win_rate": 0.62,
+          "p": 0.0057
+        }
+      },
+      "sweep_significant": "23/24",
+      "sweep": {
+        "accept_m": [
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 17.1,
+            "p": 0.0217
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.3,
+            "p": 0.0037
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.7,
+            "p": 0.0023
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 17.1,
+            "p": 0.0114
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 14.3,
+            "p": 0.0235
+          }
+        ],
+        "match_max_m": [
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 20.5,
+            "p": 0.0013
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 20.6,
+            "p": 0.0013
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.7,
+            "p": 0.0023
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 20.1,
+            "p": 0.0021
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 20.1,
+            "p": 0.0021
+          }
+        ],
+        "miss_rate": [
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.7,
+            "p": 0.0024
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.7,
+            "p": 0.0023
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.1,
+            "p": 0.0041
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.7,
+            "p": 0.0033
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.4,
+            "p": 0.0054
+          }
+        ],
+        "blackout": [
+          {
+            "n": 50,
+            "junctions": 16,
+            "reduction_pct": 7.4,
+            "p": 0.1358
+          },
+          {
+            "n": 48,
+            "junctions": 16,
+            "reduction_pct": 14.5,
+            "p": 0.0097
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.7,
+            "p": 0.0023
+          },
+          {
+            "n": 44,
+            "junctions": 16,
+            "reduction_pct": 24.5,
+            "p": 0.0017
+          }
+        ],
+        "turn_deg": [
+          {
+            "n": 47,
+            "junctions": 18,
+            "reduction_pct": 22.8,
+            "p": 0.0002
+          },
+          {
+            "n": 47,
+            "junctions": 18,
+            "reduction_pct": 22.8,
+            "p": 0.0002
+          },
+          {
+            "n": 47,
+            "junctions": 16,
+            "reduction_pct": 19.7,
+            "p": 0.0023
+          },
+          {
+            "n": 47,
+            "junctions": 14,
+            "reduction_pct": 18.8,
+            "p": 0.0063
+          },
+          {
+            "n": 47,
+            "junctions": 10,
+            "reduction_pct": 18.4,
+            "p": 0.0101
+          }
+        ]
+      }
+    },
+    {
+      "ride": "rec2.zip",
+      "duration_min": 3.5,
+      "distance_km": 1.29,
+      "mean_speed_kmh": 21.8,
+      "median_gnss_acc_m": 14.2,
+      "waypoints": 22,
+      "junctions": 5,
+      "windows": 14,
+      "peak_mean_m": {
+        "A": 264.7,
+        "B": 228.5,
+        "C": 260.8,
+        "D": 217.9
+      },
+      "contrasts": {
+        "B-A": {
+          "pct": -13.7,
+          "mean_diff_m": -36.2,
+          "ci95": [
+            -71.8,
+            -0.7
+          ],
+          "win_rate": 0.79,
+          "p": 0.064
+        },
+        "C-A": {
+          "pct": -1.5,
+          "mean_diff_m": -3.9,
+          "ci95": [
+            -9.5,
+            1.6
+          ],
+          "win_rate": 0.36,
+          "p": 0.1159
+        },
+        "D-A": {
+          "pct": -17.7,
+          "mean_diff_m": -46.8,
+          "ci95": [
+            -78.3,
+            -15.4
+          ],
+          "win_rate": 0.86,
+          "p": 0.0063
+        },
+        "D-B": {
+          "pct": -4.6,
+          "mean_diff_m": -10.6,
+          "ci95": [
+            -25.2,
+            4.0
+          ],
+          "win_rate": 0.29,
+          "p": NaN
+        },
+        "D-C": {
+          "pct": -16.4,
+          "mean_diff_m": -42.9,
+          "ci95": [
+            -74.1,
+            -11.6
+          ],
+          "win_rate": 0.86,
+          "p": 0.0052
+        }
+      },
+      "sweep_significant": "23/24",
+      "sweep": {
+        "accept_m": [
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.2,
+            "p": 0.0092
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.5,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.8,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.4,
+            "p": 0.011
+          }
+        ],
+        "match_max_m": [
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          }
+        ],
+        "miss_rate": [
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.9,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.9,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.9,
+            "p": 0.0063
+          }
+        ],
+        "blackout": [
+          {
+            "n": 17,
+            "junctions": 5,
+            "reduction_pct": 21.2,
+            "p": 0.0019
+          },
+          {
+            "n": 15,
+            "junctions": 5,
+            "reduction_pct": 19.4,
+            "p": 0.0026
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 11,
+            "junctions": 5,
+            "reduction_pct": 4.7,
+            "p": 0.8589
+          }
+        ],
+        "turn_deg": [
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 4,
+            "reduction_pct": 17.7,
+            "p": 0.0063
+          },
+          {
+            "n": 14,
+            "junctions": 3,
+            "reduction_pct": 16.8,
+            "p": 0.0132
+          }
+        ]
+      }
+    },
+    {
+      "ride": "rec3.zip",
+      "duration_min": 3.4,
+      "distance_km": 1.35,
+      "mean_speed_kmh": 23.4,
+      "median_gnss_acc_m": 8.0,
+      "waypoints": 27,
+      "junctions": 5,
+      "windows": 12,
+      "peak_mean_m": {
+        "A": 151.1,
+        "B": 135.3,
+        "C": 153.0,
+        "D": 138.4
+      },
+      "contrasts": {
+        "B-A": {
+          "pct": -10.5,
+          "mean_diff_m": -15.8,
+          "ci95": [
+            -63.0,
+            31.3
+          ],
+          "win_rate": 0.58,
+          "p": 0.5303
+        },
+        "C-A": {
+          "pct": 1.2,
+          "mean_diff_m": 1.9,
+          "ci95": [
+            -3.2,
+            7.0
+          ],
+          "win_rate": 0.25,
+          "p": 0.6002
+        },
+        "D-A": {
+          "pct": -8.4,
+          "mean_diff_m": -12.7,
+          "ci95": [
+            -57.5,
+            32.1
+          ],
+          "win_rate": 0.58,
+          "p": 0.5829
+        },
+        "D-B": {
+          "pct": 2.3,
+          "mean_diff_m": 3.1,
+          "ci95": [
+            -1.8,
+            8.1
+          ],
+          "win_rate": 0.17,
+          "p": 0.2367
+        },
+        "D-C": {
+          "pct": -9.5,
+          "mean_diff_m": -14.6,
+          "ci95": [
+            -59.7,
+            30.5
+          ],
+          "win_rate": 0.5,
+          "p": 0.6379
+        }
+      },
+      "sweep_significant": "0/24",
+      "sweep": {
+        "accept_m": [
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 11.0,
+            "p": 0.5303
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 9.5,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 15.0,
+            "p": 0.4802
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 13.5,
+            "p": 0.3882
+          }
+        ],
+        "match_max_m": [
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          }
+        ],
+        "miss_rate": [
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.6,
+            "p": 0.5829
+          }
+        ],
+        "blackout": [
+          {
+            "n": 15,
+            "junctions": 5,
+            "reduction_pct": 16.5,
+            "p": 0.0995
+          },
+          {
+            "n": 14,
+            "junctions": 5,
+            "reduction_pct": 10.2,
+            "p": 0.4703
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 9,
+            "junctions": 5,
+            "reduction_pct": 18.5,
+            "p": 0.3139
+          }
+        ],
+        "turn_deg": [
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 5,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 3,
+            "reduction_pct": 8.4,
+            "p": 0.5829
+          },
+          {
+            "n": 12,
+            "junctions": 0,
+            "reduction_pct": 10.5,
+            "p": 0.5303
+          }
+        ]
+      }
+    },
+    {
+      "ride": "rec4.zip",
+      "duration_min": 2.0,
+      "distance_km": 0.61,
+      "mean_speed_kmh": 18.1,
+      "median_gnss_acc_m": 11.9,
+      "waypoints": 13,
+      "junctions": 4,
+      "windows": 6,
+      "peak_mean_m": {
+        "A": 237.8,
+        "B": 136.8,
+        "C": 240.8,
+        "D": 141.7
+      },
+      "contrasts": {
+        "B-A": {
+          "pct": -42.5,
+          "mean_diff_m": -101.0,
+          "ci95": [
+            -200.0,
+            -2.0
+          ],
+          "win_rate": 0.83,
+          "p": 0.0464
+        },
+        "C-A": {
+          "pct": 1.3,
+          "mean_diff_m": 3.0,
+          "ci95": [
+            -0.9,
+            6.9
+          ],
+          "win_rate": 0.0,
+          "p": NaN
+        },
+        "D-A": {
+          "pct": -40.4,
+          "mean_diff_m": -96.1,
+          "ci95": [
+            -195.8,
+            3.6
+          ],
+          "win_rate": 0.83,
+          "p": 0.0464
+        },
+        "D-B": {
+          "pct": 3.6,
+          "mean_diff_m": 4.9,
+          "ci95": [
+            -1.0,
+            10.8
+          ],
+          "win_rate": 0.0,
+          "p": NaN
+        },
+        "D-C": {
+          "pct": -41.2,
+          "mean_diff_m": -99.1,
+          "ci95": [
+            -198.8,
+            0.5
+          ],
+          "win_rate": 0.83,
+          "p": 0.0464
+        }
+      },
+      "sweep_significant": "20/24",
+      "sweep": {
+        "accept_m": [
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 41.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 41.0,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 39.7,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 35.4,
+            "p": 0.173
+          }
+        ],
+        "match_max_m": [
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          }
+        ],
+        "miss_rate": [
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.7,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.7,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.7,
+            "p": 0.0464
+          }
+        ],
+        "blackout": [
+          {
+            "n": 9,
+            "junctions": 4,
+            "reduction_pct": 28.5,
+            "p": 0.0858
+          },
+          {
+            "n": 7,
+            "junctions": 4,
+            "reduction_pct": 37.7,
+            "p": 0.063
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 3,
+            "junctions": 4,
+            "reduction_pct": 43.6,
+            "p": NaN
+          }
+        ],
+        "turn_deg": [
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 4,
+            "reduction_pct": 40.4,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 3,
+            "reduction_pct": 40.8,
+            "p": 0.0464
+          },
+          {
+            "n": 6,
+            "junctions": 3,
+            "reduction_pct": 40.8,
+            "p": 0.0464
+          }
+        ]
+      }
+    },
+    {
+      "ride": "flyover-2026-10-17_04-40-10.zip",
+      "duration_min": 2.0,
+      "distance_km": 0.96,
+      "mean_speed_kmh": 29.4,
+      "median_gnss_acc_m": 14.2,
+      "waypoints": 20,
+      "junctions": 0,
+      "windows": 5,
+      "peak_mean_m": {
+        "A": 474.4,
+        "B": 375.5,
+        "C": 474.4,
+        "D": 375.5
+      },
+      "contrasts": {
+        "B-A": {
+          "pct": -20.9,
+          "mean_diff_m": -98.9,
+          "ci95": [
+            -163.8,
+            -34.0
+          ],
+          "win_rate": 0.8,
+          "p": NaN
+        },
+        "C-A": {
+          "pct": 0.0,
+          "mean_diff_m": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "win_rate": 0.0,
+          "p": NaN
+        },
+        "D-A": {
+          "pct": -20.9,
+          "mean_diff_m": -98.9,
+          "ci95": [
+            -163.8,
+            -34.0
+          ],
+          "win_rate": 0.8,
+          "p": NaN
+        },
+        "D-B": {
+          "pct": 0.0,
+          "mean_diff_m": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "win_rate": 0.0,
+          "p": NaN
+        },
+        "D-C": {
+          "pct": -20.9,
+          "mean_diff_m": -98.9,
+          "ci95": [
+            -163.8,
+            -34.0
+          ],
+          "win_rate": 0.8,
+          "p": NaN
+        }
+      },
+      "sweep_significant": "2/24",
+      "sweep": {
+        "accept_m": [
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          }
+        ],
+        "match_max_m": [
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          }
+        ],
+        "miss_rate": [
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          }
+        ],
+        "blackout": [
+          {
+            "n": 8,
+            "junctions": 0,
+            "reduction_pct": 31.2,
+            "p": 0.0117
+          },
+          {
+            "n": 7,
+            "junctions": 0,
+            "reduction_pct": 27.6,
+            "p": 0.018
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 2,
+            "junctions": 0,
+            "reduction_pct": 11.0,
+            "p": NaN
+          }
+        ],
+        "turn_deg": [
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          },
+          {
+            "n": 5,
+            "junctions": 0,
+            "reduction_pct": 20.9,
+            "p": NaN
+          }
+        ]
+      }
+    },
+    {
+      "ride": "rec1.zip",
+      "duration_min": 1.2,
+      "distance_km": 0.4,
+      "mean_speed_kmh": 19.4,
+      "median_gnss_acc_m": 14.2,
+      "waypoints": 9,
+      "junctions": 1,
+      "windows": 1,
+      "peak_mean_m": {
+        "A": 373.9,
+        "B": 201.3,
+        "C": 373.9,
+        "D": 201.3
+      },
+      "contrasts": {},
+      "sweep_significant": "0/24",
+      "sweep": {
+        "accept_m": [
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          }
+        ],
+        "match_max_m": [
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          }
+        ],
+        "miss_rate": [
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          }
+        ],
+        "blackout": [
+          {
+            "n": 4,
+            "junctions": 1,
+            "reduction_pct": 46.7,
+            "p": NaN
+          },
+          {
+            "n": 2,
+            "junctions": 1,
+            "reduction_pct": 50.0,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 0,
+            "junctions": 1,
+            "reduction_pct": null,
+            "p": null
+          }
+        ],
+        "turn_deg": [
+          {
+            "n": 1,
+            "junctions": 2,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 2,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 1,
+            "reduction_pct": 46.2,
+            "p": NaN
+          }
+        ]
+      }
+    },
+    {
+      "ride": "tunnel-2026-10-17_04-45-15.zip",
+      "duration_min": 0.9,
+      "distance_km": 0.5,
+      "mean_speed_kmh": 31.7,
+      "median_gnss_acc_m": 8.0,
+      "waypoints": 11,
+      "junctions": 0,
+      "windows": 0,
+      "peak_mean_m": {},
+      "contrasts": {},
+      "sweep_significant": "0/24",
+      "sweep": {
+        "accept_m": [
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          }
+        ],
+        "match_max_m": [
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          }
+        ],
+        "miss_rate": [
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          }
+        ],
+        "blackout": [
+          {
+            "n": 2,
+            "junctions": 0,
+            "reduction_pct": 26.2,
+            "p": NaN
+          },
+          {
+            "n": 1,
+            "junctions": 0,
+            "reduction_pct": 30.9,
+            "p": NaN
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          }
+        ],
+        "turn_deg": [
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          },
+          {
+            "n": 0,
+            "junctions": 0,
+            "reduction_pct": null,
+            "p": null
+          }
+        ]
+      }
+    }
+  ],
+  "pooled": {
+    "windows": 85,
+    "peak_mean_m": {
+      "A": 189.2,
+      "B": 155.0,
+      "C": 190.3,
+      "D": 150.2
+    },
+    "contrasts": {
+      "B-A": {
+        "pct": -18.1,
+        "mean_diff_m": -34.2,
+        "ci95": [
+          -50.9,
+          -17.5
+        ],
+        "win_rate": 0.64,
+        "p": 0.0004
+      },
+      "C-A": {
+        "pct": 0.6,
+        "mean_diff_m": 1.1,
+        "ci95": [
+          -2.0,
+          4.1
+        ],
+        "win_rate": 0.27,
+        "p": 0.4012
+      },
+      "D-A": {
+        "pct": -20.6,
+        "mean_diff_m": -39.0,
+        "ci95": [
+          -54.4,
+          -23.6
+        ],
+        "win_rate": 0.73,
+        "p": 0.0
+      },
+      "D-B": {
+        "pct": -3.1,
+        "mean_diff_m": -4.8,
+        "ci95": [
+          -10.1,
+          0.6
+        ],
+        "win_rate": 0.25,
+        "p": 0.6264
+      },
+      "D-C": {
+        "pct": -21.1,
+        "mean_diff_m": -40.1,
+        "ci95": [
+          -55.9,
+          -24.3
+        ],
+        "win_rate": 0.67,
+        "p": 0.0
+      }
+    }
+  }
+}

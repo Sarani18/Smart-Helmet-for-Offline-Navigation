@@ -1,0 +1,144 @@
+{
+  "ride": {
+    "gps_fixes": 537,
+    "duration_s": 540.4,
+    "waypoints": 50,
+    "junctions": 16
+  },
+  "params": {
+    "ride": "/tmp/ride",
+    "blackout": 60.0,
+    "stride": 20.0,
+    "miss_rate": 0.05,
+    "accept_m": 25.0,
+    "match_max_m": 40.0,
+    "seed": 1000,
+    "out": "tests/eval_out/real_ride.json"
+  },
+  "aggregate": {
+    "A: DR only": {
+      "windows": 23,
+      "peak_error_m": {
+        "n": 23,
+        "mean": 134.56,
+        "std": 81.95,
+        "min": 22.32,
+        "max": 385.02
+      },
+      "mean_error_m": {
+        "n": 23,
+        "mean": 70.86,
+        "std": 40.53,
+        "min": 9.01,
+        "max": 169.92
+      },
+      "max_drift_between_corr_m": {
+        "n": 23,
+        "mean": 134.56,
+        "std": 81.95,
+        "min": 22.32,
+        "max": 385.02
+      },
+      "corrections_per_window": {
+        "n": 23,
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    },
+    "B: DR + map matching": {
+      "windows": 23,
+      "peak_error_m": {
+        "n": 23,
+        "mean": 115.54,
+        "std": 79.75,
+        "min": 46.44,
+        "max": 409.62
+      },
+      "mean_error_m": {
+        "n": 23,
+        "mean": 57.38,
+        "std": 38.79,
+        "min": 19.16,
+        "max": 181.23
+      },
+      "max_drift_between_corr_m": {
+        "n": 23,
+        "mean": 115.54,
+        "std": 79.75,
+        "min": 46.44,
+        "max": 409.62
+      },
+      "corrections_per_window": {
+        "n": 23,
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    },
+    "C: DR + junction corr.": {
+      "windows": 23,
+      "peak_error_m": {
+        "n": 23,
+        "mean": 135.45,
+        "std": 83.22,
+        "min": 29.34,
+        "max": 407.54
+      },
+      "mean_error_m": {
+        "n": 23,
+        "mean": 70.82,
+        "std": 42.25,
+        "min": 13.41,
+        "max": 191.07
+      },
+      "max_drift_between_corr_m": {
+        "n": 23,
+        "mean": 135.45,
+        "std": 83.22,
+        "min": 29.34,
+        "max": 407.54
+      },
+      "corrections_per_window": {
+        "n": 23,
+        "mean": 1.96,
+        "std": 1.55,
+        "min": 0.0,
+        "max": 6.0
+      }
+    },
+    "D: full": {
+      "windows": 23,
+      "peak_error_m": {
+        "n": 23,
+        "mean": 105.23,
+        "std": 77.79,
+        "min": 28.05,
+        "max": 409.62
+      },
+      "mean_error_m": {
+        "n": 23,
+        "mean": 52.46,
+        "std": 37.07,
+        "min": 15.24,
+        "max": 176.11
+      },
+      "max_drift_between_corr_m": {
+        "n": 23,
+        "mean": 105.23,
+        "std": 77.79,
+        "min": 28.05,
+        "max": 409.62
+      },
+      "corrections_per_window": {
+        "n": 23,
+        "mean": 2.39,
+        "std": 1.21,
+        "min": 0.0,
+        "max": 5.0
+      }
+    }
+  }
+}

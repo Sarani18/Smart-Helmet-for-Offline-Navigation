@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Segmentation benchmark multi-thread</title>
+<style>
+  body { font: 16px -apple-system, system-ui, sans-serif; margin: 20px; color: #111; background: #fff; }
+  button { font-size: 18px; padding: 12px 20px; }
+  pre { background: #f3f3f3; padding: 12px; white-space: pre-wrap; font-size: 13px; }
+</style>
+<script>
+  window.__wasmMemories = [];
+  const OrigMemory = WebAssembly.Memory;
+  WebAssembly.Memory = function (desc) { const m = new OrigMemory(desc); window.__wasmMemories.push(m); return m; };
+  WebAssembly.Memory.prototype = OrigMemory.prototype;
+  const grab = (res) => {
+    const inst = res.instance || res;
+    if (inst && inst.exports) for (const v of Object.values(inst.exports)) if (v instanceof OrigMemory) window.__wasmMemories.push(v);
+    return res;
+  };
+  const oi = WebAssembly.instantiate, ois = WebAssembly.instantiateStreaming;
+  WebAssembly.instantiate = (...a) => oi.apply(WebAssembly, a).then(grab);
+  if (ois) WebAssembly.instantiateStreaming = (...a) => ois.apply(WebAssembly, a).then(grab);
+</script>
+<script src="ort.webgpu.min.js"></script>
+</head>
+<body>
+<h2>Multi-thread run</h2>
+<p>Runs three configurations in turn (about 2 minutes). Keep the screen on.</p>
+<label>Phone model: <input id="device" placeholder="e.g. iPhone 17 Pro Max" style="font-size:16px"></label>
+<p><button id="go">Run benchmark</button></p>
+<pre id="log"></pre>
+<script>
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.ceil(p * s.length) - 1)]; };
+const wasmMB = () => Math.max(0, ...window.__wasmMemories.map(m => m.buffer.byteLength)) / 1048576;
+
+async function bench(label, opts, input) {
+  const t0 = performance.now();
+  const session = await ort.InferenceSession.create('seg.onnx', opts);
+  const loadMs = performance.now() - t0;
+  const first = await session.run({ input });
+  const logits = await first.out.getData();
+  const C = 27, HW = 320 * 320, am = new Uint8Array(HW);
+  for (let p = 0; p < HW; p++) { let b = 0, bv = -Infinity; for (let c = 0; c < C; c++) { const v = logits[c * HW + p]; if (v > bv) { bv = v; b = c; } } am[p] = b; }
+  window.__ref = window.__ref || am;
+  let agree = 0; for (let p = 0; p < HW; p++) agree += (am[p] === window.__ref[p]);
+  for (let i = 0; i < 4; i++) await session.run({ input });
+  const times = [];
+  for (let i = 0; i < 30; i++) {
+    const s = performance.now();
+    const out = await session.run({ input });
+    await out.out.getData();
+    times.push(performance.now() - s);
+  }
+  await session.release();
+  const mean = times.reduce((a, b) => a + b, 0) / times.length;
+  const r = { config: label, load_ms: +loadMs.toFixed(1), mean_ms: +mean.toFixed(1),
+              p95_ms: +pct(times, 0.95).toFixed(1), max_ms: +Math.max(...times).toFixed(1),
+              min_ms: +Math.min(...times).toFixed(1), wasm_memory_mb: +wasmMB().toFixed(1),
+              argmax_agreement_vs_first_config: +(agree / HW).toFixed(4),
+              times_ms: times.map(t => +t.toFixed(1)) };
+  log(`${label}: mean ${r.mean_ms} ms, p95 ${r.p95_ms} ms, wasm mem ${r.wasm_memory_mb} MB, agreement ${r.argmax_agreement_vs_first_config}`);
+  return r;
+}
+
+document.getElementById('go').onclick = async () => {
+  document.getElementById('go').disabled = true;
+  const env = { device: document.getElementById('device').value || 'unspecified', userAgent: navigator.userAgent,
+                hardwareConcurrency: navigator.hardwareConcurrency || null,
+                crossOriginIsolated: self.crossOriginIsolated, webgpu: !!navigator.gpu, results: [] };
+  log(`isolated=${env.crossOriginIsolated} webgpu=${env.webgpu} cores=${env.hardwareConcurrency}`);
+  ort.env.wasm.wasmPaths = './';
+  const data = new Float32Array(3 * 320 * 320);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const input = new ort.Tensor('float32', data, [1, 3, 320, 320]);
+  const run = async (label, opts, setup) => {
+    try { setup && setup(); env.results.push(await bench(label, opts, input)); }
+    catch (e) { log(`${label}: FAILED ${e}`); env.results.push({ config: label, error: String(e) }); }
+  };
+  const n = Math.min(4, navigator.hardwareConcurrency || 4);
+  ort.env.wasm.numThreads = n;
+  await run(`wasm-${n}threads`, { executionProviders: ['wasm'] });
+  const r = await fetch('result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(env) });
+  log(r.ok ? '\nAll done. Results sent to the Mac.' : '\nSend failed; screenshot this.');
+};
+</script>
+<p><button id="mt" hidden onclick="location.href='mt.html'">Run multi-thread</button></p>
+</body>
+</html>

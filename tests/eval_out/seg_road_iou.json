@@ -1,0 +1,22 @@
+{
+  "dataset": "BDD100K seg val (cross-domain; model trained on IDD)",
+  "images_evaluated": 299,
+  "images_skipped": 0,
+  "micro": {
+    "road_IoU": 0.8555,
+    "precision": 0.9035,
+    "recall": 0.9416,
+    "f1": 0.9221,
+    "pixel_accuracy": 0.9586
+  },
+  "per_image_iou": {
+    "mean": 0.8299,
+    "std": 0.1774,
+    "n": 299
+  },
+  "per_image_f1": {
+    "mean": 0.8928,
+    "std": 0.1507,
+    "n": 299
+  }
+}

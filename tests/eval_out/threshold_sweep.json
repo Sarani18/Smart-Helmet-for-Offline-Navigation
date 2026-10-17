@@ -1,0 +1,180 @@
+{
+  "accept_m": [
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 17.1,
+      "p": 0.0217,
+      "value": 15.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.3,
+      "p": 0.0037,
+      "value": 20.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.7,
+      "p": 0.0023,
+      "value": 25.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 17.1,
+      "p": 0.0114,
+      "value": 30.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 14.3,
+      "p": 0.0235,
+      "value": 40.0
+    }
+  ],
+  "match_max_m": [
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 20.5,
+      "p": 0.0013,
+      "value": 25.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 20.6,
+      "p": 0.0013,
+      "value": 30.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.7,
+      "p": 0.0023,
+      "value": 40.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 20.1,
+      "p": 0.0021,
+      "value": 50.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 20.1,
+      "p": 0.0021,
+      "value": 60.0
+    }
+  ],
+  "miss_rate": [
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.7,
+      "p": 0.0024,
+      "value": 0.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.7,
+      "p": 0.0023,
+      "value": 0.05
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.1,
+      "p": 0.0041,
+      "value": 0.1
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.7,
+      "p": 0.0033,
+      "value": 0.2
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.4,
+      "p": 0.0054,
+      "value": 0.3
+    }
+  ],
+  "blackout": [
+    {
+      "n": 50,
+      "junctions": 16,
+      "reduction_pct": 7.4,
+      "p": 0.1358,
+      "value": 30.0
+    },
+    {
+      "n": 48,
+      "junctions": 16,
+      "reduction_pct": 14.5,
+      "p": 0.0097,
+      "value": 45.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.7,
+      "p": 0.0023,
+      "value": 60.0
+    },
+    {
+      "n": 44,
+      "junctions": 16,
+      "reduction_pct": 24.5,
+      "p": 0.0017,
+      "value": 90.0
+    }
+  ],
+  "turn_deg": [
+    {
+      "n": 47,
+      "junctions": 18,
+      "reduction_pct": 22.8,
+      "p": 0.0002,
+      "value": 25.0
+    },
+    {
+      "n": 47,
+      "junctions": 18,
+      "reduction_pct": 22.8,
+      "p": 0.0002,
+      "value": 30.0
+    },
+    {
+      "n": 47,
+      "junctions": 16,
+      "reduction_pct": 19.7,
+      "p": 0.0023,
+      "value": 35.0
+    },
+    {
+      "n": 47,
+      "junctions": 14,
+      "reduction_pct": 18.8,
+      "p": 0.0063,
+      "value": 45.0
+    },
+    {
+      "n": 47,
+      "junctions": 10,
+      "reduction_pct": 18.4,
+      "p": 0.0101,
+      "value": 60.0
+    }
+  ]
+}

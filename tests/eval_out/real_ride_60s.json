@@ -1,0 +1,172 @@
+{
+  "ride": {
+    "gps_fixes": 537,
+    "duration_s": 540.4,
+    "waypoints": 50,
+    "junctions": 16
+  },
+  "params": {
+    "ride": "/tmp/ride",
+    "blackout": 60.0,
+    "stride": 10.0,
+    "miss_rate": 0.05,
+    "accept_m": 25.0,
+    "match_max_m": 40.0,
+    "seed": 1000,
+    "out": "tests/eval_out/real_ride_60s.json"
+  },
+  "aggregate": {
+    "A: DR only": {
+      "windows": 47,
+      "peak_error_m": {
+        "n": 47,
+        "mean": 135.92,
+        "std": 88.61,
+        "min": 22.32,
+        "max": 439.2
+      },
+      "mean_error_m": {
+        "n": 47,
+        "mean": 69.49,
+        "std": 41.55,
+        "min": 9.01,
+        "max": 183.81
+      },
+      "max_drift_between_corr_m": {
+        "n": 47,
+        "mean": 135.92,
+        "std": 88.61,
+        "min": 22.32,
+        "max": 439.2
+      },
+      "corrections_per_window": {
+        "n": 47,
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "pointer_correct_rate": {
+        "n": 47,
+        "mean": 0.23,
+        "std": 0.42,
+        "min": 0.0,
+        "max": 1.0
+      }
+    },
+    "B: DR + map matching": {
+      "windows": 47,
+      "peak_error_m": {
+        "n": 47,
+        "mean": 115.96,
+        "std": 89.69,
+        "min": 33.29,
+        "max": 423.84
+      },
+      "mean_error_m": {
+        "n": 47,
+        "mean": 58.01,
+        "std": 45.21,
+        "min": 17.53,
+        "max": 233.11
+      },
+      "max_drift_between_corr_m": {
+        "n": 47,
+        "mean": 115.96,
+        "std": 89.69,
+        "min": 33.29,
+        "max": 423.84
+      },
+      "corrections_per_window": {
+        "n": 47,
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "pointer_correct_rate": {
+        "n": 47,
+        "mean": 0.36,
+        "std": 0.48,
+        "min": 0.0,
+        "max": 1.0
+      }
+    },
+    "C: DR + junction corr.": {
+      "windows": 47,
+      "peak_error_m": {
+        "n": 47,
+        "mean": 138.21,
+        "std": 91.68,
+        "min": 29.34,
+        "max": 442.78
+      },
+      "mean_error_m": {
+        "n": 47,
+        "mean": 70.64,
+        "std": 44.9,
+        "min": 13.41,
+        "max": 191.18
+      },
+      "max_drift_between_corr_m": {
+        "n": 47,
+        "mean": 138.21,
+        "std": 91.68,
+        "min": 29.34,
+        "max": 442.78
+      },
+      "corrections_per_window": {
+        "n": 47,
+        "mean": 2.09,
+        "std": 1.53,
+        "min": 0.0,
+        "max": 6.0
+      },
+      "pointer_correct_rate": {
+        "n": 47,
+        "mean": 0.3,
+        "std": 0.46,
+        "min": 0.0,
+        "max": 1.0
+      }
+    },
+    "D: full": {
+      "windows": 47,
+      "peak_error_m": {
+        "n": 47,
+        "mean": 109.09,
+        "std": 88.48,
+        "min": 32.24,
+        "max": 423.84
+      },
+      "mean_error_m": {
+        "n": 47,
+        "mean": 55.52,
+        "std": 44.98,
+        "min": 17.71,
+        "max": 232.98
+      },
+      "max_drift_between_corr_m": {
+        "n": 47,
+        "mean": 109.09,
+        "std": 88.48,
+        "min": 32.24,
+        "max": 423.84
+      },
+      "corrections_per_window": {
+        "n": 47,
+        "mean": 2.47,
+        "std": 1.41,
+        "min": 0.0,
+        "max": 6.0
+      },
+      "pointer_correct_rate": {
+        "n": 47,
+        "mean": 0.36,
+        "std": 0.48,
+        "min": 0.0,
+        "max": 1.0
+      }
+    }
+  }
+}

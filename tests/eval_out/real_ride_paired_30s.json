@@ -1,0 +1,136 @@
+{
+  "blackout_s": 30.0,
+  "n_windows": 50,
+  "contrasts": {
+    "peak error|B-A": {
+      "mean_diff_m": -6.09,
+      "pct": -8.4,
+      "ci95": [
+        -13.85,
+        1.68
+      ],
+      "win_rate": 0.66,
+      "wilcoxon_p": 0.05658
+    },
+    "peak error|C-A": {
+      "mean_diff_m": 2.2,
+      "pct": 3.0,
+      "ci95": [
+        -2.4,
+        6.8
+      ],
+      "win_rate": 0.28,
+      "wilcoxon_p": 0.25324
+    },
+    "peak error|D-A": {
+      "mean_diff_m": -5.34,
+      "pct": -7.4,
+      "ci95": [
+        -13.23,
+        2.55
+      ],
+      "win_rate": 0.62,
+      "wilcoxon_p": 0.13585
+    },
+    "peak error|D-B": {
+      "mean_diff_m": 0.75,
+      "pct": 1.1,
+      "ci95": [
+        -2.83,
+        4.33
+      ],
+      "win_rate": 0.24,
+      "wilcoxon_p": 0.29306
+    },
+    "peak error|D-C": {
+      "mean_diff_m": -7.54,
+      "pct": -10.1,
+      "ci95": [
+        -15.34,
+        0.26
+      ],
+      "win_rate": 0.64,
+      "wilcoxon_p": 0.02186
+    },
+    "mean error|B-A": {
+      "mean_diff_m": -2.83,
+      "pct": -7.8,
+      "ci95": [
+        -6.48,
+        0.83
+      ],
+      "win_rate": 0.64,
+      "wilcoxon_p": 0.04728
+    },
+    "mean error|C-A": {
+      "mean_diff_m": 1.47,
+      "pct": 4.1,
+      "ci95": [
+        -1.71,
+        4.66
+      ],
+      "win_rate": 0.3,
+      "wilcoxon_p": 0.30292
+    },
+    "mean error|D-A": {
+      "mean_diff_m": -2.0,
+      "pct": -5.5,
+      "ci95": [
+        -6.21,
+        2.21
+      ],
+      "win_rate": 0.6,
+      "wilcoxon_p": 0.29492
+    },
+    "mean error|D-B": {
+      "mean_diff_m": 0.83,
+      "pct": 2.5,
+      "ci95": [
+        -1.4,
+        3.05
+      ],
+      "win_rate": 0.42,
+      "wilcoxon_p": 0.21808
+    },
+    "mean error|D-C": {
+      "mean_diff_m": -3.47,
+      "pct": -9.2,
+      "ci95": [
+        -7.77,
+        0.82
+      ],
+      "win_rate": 0.74,
+      "wilcoxon_p": 0.00902
+    }
+  },
+  "pointer_correct": {
+    "A: DR only": {
+      "rate": 0.46,
+      "ci95": [
+        0.32,
+        0.6
+      ]
+    },
+    "B: DR + map matching": {
+      "rate": 0.6,
+      "ci95": [
+        0.463,
+        0.737
+      ]
+    },
+    "C: DR + junction corr.": {
+      "rate": 0.44,
+      "ci95": [
+        0.301,
+        0.579
+      ]
+    },
+    "D: full": {
+      "rate": 0.56,
+      "ci95": [
+        0.421,
+        0.699
+      ]
+    }
+  }
+}

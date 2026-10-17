@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Power test</title>
+<style>
+  body { font: 17px -apple-system, system-ui, sans-serif; margin: 20px; color: #111; background: #fff; }
+  button { font-size: 18px; padding: 12px 18px; margin: 4px 0; }
+  input { font-size: 17px; width: 70px; }
+  #big { font-size: 34px; font-weight: 600; margin: 16px 0; }
+  pre { background: #f3f3f3; padding: 12px; white-space: pre-wrap; font-size: 13px; }
+</style>
+<script src="ort.webgpu.min.js"></script>
+</head>
+<body>
+<h2>Power test (30 min)</h2>
+<p>Mode: <b id="modeLabel"></b></p>
+<p>1. Battery % now: <input id="b0" type="number" min="1" max="100"></p>
+<p><button id="start">2. Start</button></p>
+<div id="big"></div>
+<p id="endbox" hidden>3. Battery % now: <input id="b1" type="number" min="1" max="100"> <button id="send">Send</button></p>
+<pre id="log"></pre>
+<script>
+const mode = new URLSearchParams(location.search).get('mode') === 'idle' ? 'idle' : 'load';
+const DURATION_S = +(new URLSearchParams(location.search).get('dur') || 1800);
+document.getElementById('modeLabel').textContent = mode === 'idle'
+  ? 'IDLE (screen on, nothing running)' : 'LOAD (model running continuously on the GPU)';
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+let wakeLock = null, result = null;
+
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock.request('screen'); log('screen wake lock on'); }
+  catch (e) { log('wake lock unavailable: set Auto-Lock to Never in Settings > Display'); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && result === null) keepAwake();
+  if (document.visibilityState === 'hidden') log('WARNING: page was hidden at ' + new Date().toLocaleTimeString());
+});
+
+document.getElementById('start').onclick = async () => {
+  const b0 = +document.getElementById('b0').value;
+  if (!b0) { alert('Enter the battery % first'); return; }
+  document.getElementById('start').disabled = true;
+  await keepAwake();
+  let session = null, input = null, count = 0, hidden = 0;
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') hidden++; });
+  if (mode === 'load') {
+    ort.env.wasm.wasmPaths = './';
+    session = await ort.InferenceSession.create('seg.onnx', { executionProviders: ['webgpu'] });
+    const data = new Float32Array(3 * 320 * 320);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    input = new ort.Tensor('float32', data, [1, 3, 320, 320]);
+    log('model loaded on GPU');
+  }
+  const t0 = performance.now(), wall0 = new Date();
+  const big = document.getElementById('big');
+  while ((performance.now() - t0) / 1000 < DURATION_S) {
+    if (mode === 'load') {
+      const out = await session.run({ input });
+      await out.out.getData();
+      count++;
+    } else {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    const left = DURATION_S - (performance.now() - t0) / 1000;
+    if (mode === 'idle' || count % 20 === 0)
+      big.textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')} left` + (mode === 'load' ? `  ·  ${count} runs` : '');
+  }
+  const elapsed = (performance.now() - t0) / 1000;
+  if (wakeLock) wakeLock.release();
+  big.textContent = 'Finished. Enter battery % below.';
+  result = { mode, device: 'iPhone 17 Pro Max', userAgent: navigator.userAgent, battery_start_pct: b0,
+             started_at: wall0.toISOString(), elapsed_s: +elapsed.toFixed(1), inferences: count,
+             inferences_per_s: +(count / elapsed).toFixed(2), times_hidden: hidden };
+  document.getElementById('endbox').hidden = false;
+};
+
+document.getElementById('send').onclick = async () => {
+  result.battery_end_pct = +document.getElementById('b1').value;
+  if (!result.battery_end_pct) { alert('Enter the battery % first'); return; }
+  const r = await fetch('result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result) });
+  log(r.ok ? 'Sent to the Mac. Done.' : 'Send failed; screenshot this screen.');
+  log(JSON.stringify(result, null, 1));
+};
+</script>
+</body>
+</html>
